@@ -44,9 +44,6 @@ function setup() {
     // windowWidth and windowHeight are p5.js variables for screen size
     createCanvas(windowWidth, windowHeight);
     
-    // Show debug panel FIRST
-    showDebug();
-    
     // Enable motion sensors with tap permission (iOS)
     enableGyroTap();
    
@@ -132,8 +129,7 @@ function draw()
     }
     else 
     {
-        debug("Waiting for sensor permissions...");
-        debug("Tap the screen to enable sensors");
+         image(ghostWave, 0, 0);
     }
 }
 
