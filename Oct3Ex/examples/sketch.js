@@ -68,32 +68,34 @@ function setup() {
 function draw() 
 {
     background(200, 255, 200);
-    image(ghostSleep,0,0);
     
     
     // Clear the screen each frame
     // Change background color based on touch state
     if (isCurrentlyTouching) 
     {
-        touchDuration = (millis() - touchStartTime) / 1000;  // Convert to seconds
+        /*touchDuration = (millis() - touchStartTime) / 1000;  // Convert to seconds
         text("TOUCHED",width/2,height/2);
         
         // Display the touch duration
         textSize(24);
         text("Touch Time: " + touchDuration.toFixed(1) + "s", width/2, height/2 + 60);
         textSize(48);  // Reset to original size
+        */
        
         // Show wake image for the first 2 seconds, then switch to wave GIF
-        if (touchDuration >= 1) {
+        if (touchDuration = 1) {
+            image(ghostWake, 0, 0);
+        } else if (touchDuration > 1) {
             image(ghostWave, 0, 0);
         } else {
-            image(ghostWake, 0, 0);
+            image(ghostSleep, 0, 0);
         }
 
     } 
     else 
     {
-        text("NOT TOUCHED",width/2,height/2); 
+       // text("NOT TOUCHED",width/2,height/2); 
     }
     
     // Show the touch counter at the top of the screen
