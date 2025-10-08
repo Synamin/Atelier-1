@@ -98,10 +98,10 @@ function draw()
     }
     
     // Show the touch counter at the top of the screen
-    textSize(32);  // Smaller text for the counter
+  /*  textSize(32);  // Smaller text for the counter
     text("Touch Count: " + touchCounter, width/2, 60);
     textSize(48);  // Reset to original size
-
+*/
       // No visual feedback in minimal version
     
     // Check if motion sensors are enabled
