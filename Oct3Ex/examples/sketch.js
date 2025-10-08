@@ -69,69 +69,46 @@ function draw()
 {
     background(200, 255, 200);
     
-    
-    // Clear the screen each frame
-    // Change background color based on touch state
-    if (isCurrentlyTouching) 
-    {
-        touchDuration = (millis() - touchStartTime) / 1000;  // Convert to seconds
-        /*text("TOUCHED",width/2,height/2);
-        
-        // Display the touch duration
-        textSize(24);
-        text("Touch Time: " + touchDuration.toFixed(1) + "s", width/2, height/2 + 60);
-        textSize(48);  // Reset to original size
-        */
-       
-        // Show wake image for the first 2 seconds, then switch to wave GIF
-        if (touchDuration < 1) {
-            image(ghostWake, 0, 0);
-        } else {
-            image(ghostWave, 0, 0);
-        }
+    // Tilt threshold (degrees). Adjust to taste.
+const tiltThreshold = 40;
+// Determine if we should be showing a fall animation
+let isFalling = false;
+let ry = 0;
+if (window.sensorsEnabled && !isCurrentlyTouching) {
+    ry = rotationY;
+    isFalling = (ry < -tiltThreshold) || (ry > tiltThreshold);
+}
 
+if (isCurrentlyTouching) 
+{
+    touchDuration = (millis() - touchStartTime) / 1000;  // Convert to seconds
+
+    // Show wake image for the first 2 seconds, then switch to wave GIF
+    if (touchDuration < 2) {
+        image(ghostWake, 0, 0);
+    } else {
+        image(ghostWave, 0, 0);
+    }
+} 
+else 
+{
+    // If device is tilted enough, show the appropriate fall GIF.
+    if (isFalling) {
+        if (ry < -tiltThreshold) {
+            image(ghostFallLeft, 0, 0);
+        } else {
+            image(ghostFallRight, 0, 0);
+        }
     } 
     else 
     {
-       // text("NOT TOUCHED",width/2,height/2); 
-       image(ghostSleep, 0, 0);
+        // Not touching and not falling -> normal sleep image
+        image(ghostSleep, 0, 0);
     }
-    
-    // Show the touch counter at the top of the screen
-  /*  textSize(32);  // Smaller text for the counter
-    text("Touch Count: " + touchCounter, width/2, 60);
-    textSize(48);  // Reset to original size
-*/
-      // No visual feedback in minimal version
-    
-    // Check if motion sensors are enabled
-    if (window.sensorsEnabled) 
-    {
-        // Get current orientation values
-        let rx = rotationX;
-        let ry = rotationY;
-        let rz = rotationZ;
-        
-    // Tilt threshold (degrees). Adjust to taste.
-        const tiltThreshold = 40;
+}
 
-        // Only show fall animations when NOT touching (touch should override tilt)
-        if (!isCurrentlyTouching) {
-            
-            if (ry < -tiltThreshold) {
-                // Phone rotated left -> show left-fall GIF
-                image(ghostFallLeft, 0, 0);
-            } else if (ry > tiltThreshold) {
-                // Phone rotated right -> show right-fall GIF
-                image(ghostFallRight, 0, 0);
-            }
-        }
-
-    }
-    else 
-    {
-         image(ghostWave, 0, 0);
-    }
+// (optional) other non-visual logic / debug can go here
+    
 }
 
 // ==============================================
