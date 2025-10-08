@@ -88,14 +88,13 @@ function draw()
             image(ghostWake, 0, 0);
         } else if (touchDuration > 1) {
             image(ghostWave, 0, 0);
-        } else {
-            image(ghostSleep, 0, 0);
         }
 
     } 
     else 
     {
        // text("NOT TOUCHED",width/2,height/2); 
+       image(ghostSleep, 0, 0);
     }
     
     // Show the touch counter at the top of the screen
