@@ -19,9 +19,21 @@ let touchStartTime = 0;           // When the current touch started (in millisec
 let touchDuration = 0;            // How long the current touch has been active (in seconds)
 let flipFail;
 
+let ghostWave;
+let ghostSleep;
+let ghostWake;
+let ghostFallRight;
+let ghostFallLeft;
+
 function preload()
 {
   flipFail = loadImage('flip1.gif');
+
+  ghostWave = loadImage('ghost_wave.gif');
+  ghostSleep = loadImage('ghost_sleep.gif');
+  ghostWake = loadImage('ghost_wokenUp.PNG');
+  ghostFallRight = loadImage('ghost_fall_right.gif');
+  ghostFallLeft = loadImage('ghost_fall_left.gif');
 }
 
 // ==============================================
@@ -32,9 +44,22 @@ function setup() {
     // windowWidth and windowHeight are p5.js variables for screen size
     createCanvas(windowWidth, windowHeight);
     
+    // Show debug panel FIRST
+    showDebug();
+    
+    // Enable motion sensors with tap permission (iOS)
+    enableGyroTap();
+   
     // Lock mobile gestures to prevent scrolling, zooming, etc.
     // This function comes from the mobile-p5-permissions library
     lockGestures();
+
+     // Set to show in Degrees
+    angleMode(DEGREES);
+    
+    debug("Orientation Basic - Minimal Version");
+    debug("Tilt your device to see orientation values");
+    debug("Waiting for sensor data...");
     
     // Set initial text properties
     textAlign(CENTER, CENTER);  // Center the text horizontally and vertically
@@ -50,6 +75,7 @@ function setup() {
 function draw() 
 {
     background(200, 255, 200);
+    image(ghostSleep,0,0);
     
     
     // Clear the screen each frame
@@ -63,7 +89,14 @@ function draw()
         textSize(24);
         text("Touch Time: " + touchDuration.toFixed(1) + "s", width/2, height/2 + 60);
         textSize(48);  // Reset to original size
-        image(flipFail,0,0);
+       
+        // Show wake image for the first 2 seconds, then switch to wave GIF
+        if (touchDuration >= 1) {
+            image(ghostWave, 0, 0);
+        } else {
+            image(ghostWake, 0, 0);
+        }
+
     } 
     else 
     {
@@ -75,6 +108,43 @@ function draw()
     text("Touch Count: " + touchCounter, width/2, 60);
     textSize(48);  // Reset to original size
 
+      // No visual feedback in minimal version
+    
+    // Check if motion sensors are enabled
+    if (window.sensorsEnabled) 
+    {
+        // Get current orientation values
+        let rx = rotationX;
+        let ry = rotationY;
+        let rz = rotationZ;
+        
+    // Tilt threshold (degrees). Adjust to taste.
+        const tiltThreshold = 40;
+
+        // Only show fall animations when NOT touching (touch should override tilt)
+        if (!isCurrentlyTouching) {
+            if (ry < -tiltThreshold) {
+                // Phone rotated left -> show left-fall GIF
+                image(ghostFallLeft, 0, 0);
+            } else if (ry > tiltThreshold) {
+                // Phone rotated right -> show right-fall GIF
+                image(ghostFallRight, 0, 0);
+            }
+        }
+
+        // Output to debug panel
+        debug("--- Device Orientation ---");
+        debug("Rotation X (Tilt Forward/Back): " + int(rx) + "°");
+        debug("Rotation Y (Tilt Left/Right): " + int(ry) + "°");
+        debug("Rotation Z (Turn/Compass): " + int(rz) + "°");
+        
+
+    }
+    else 
+    {
+        debug("Waiting for sensor permissions...");
+        debug("Tap the screen to enable sensors");
+    }
 }
 
 // ==============================================
