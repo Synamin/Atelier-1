@@ -84,7 +84,7 @@ function draw()
         */
        
         // Show wake image for the first 2 seconds, then switch to wave GIF
-        if (touchDuration < 2) {
+        if (touchDuration < 1) {
             image(ghostWake, 0, 0);
         } else {
             image(ghostWave, 0, 0);
