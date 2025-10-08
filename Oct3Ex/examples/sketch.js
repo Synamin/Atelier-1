@@ -31,7 +31,7 @@ function preload()
 
   ghostWave = loadImage('ghostWave.gif');
   ghostSleep = loadImage('ghostSleep.gif');
-  ghostWake = loadImage('ghostWake.PNG');
+  ghostWake = loadImage('ghostWake.png');
   ghostFallRight = loadImage('ghostRight.gif');
   ghostFallLeft = loadImage('ghostLeft.gif');
 }
@@ -56,10 +56,6 @@ function setup() {
 
      // Set to show in Degrees
     angleMode(DEGREES);
-    
-    debug("Orientation Basic - Minimal Version");
-    debug("Tilt your device to see orientation values");
-    debug("Waiting for sensor data...");
     
     // Set initial text properties
     textAlign(CENTER, CENTER);  // Center the text horizontally and vertically
@@ -123,6 +119,7 @@ function draw()
 
         // Only show fall animations when NOT touching (touch should override tilt)
         if (!isCurrentlyTouching) {
+            
             if (ry < -tiltThreshold) {
                 // Phone rotated left -> show left-fall GIF
                 image(ghostFallLeft, 0, 0);
@@ -131,13 +128,6 @@ function draw()
                 image(ghostFallRight, 0, 0);
             }
         }
-
-        // Output to debug panel
-        debug("--- Device Orientation ---");
-        debug("Rotation X (Tilt Forward/Back): " + int(rx) + "°");
-        debug("Rotation Y (Tilt Left/Right): " + int(ry) + "°");
-        debug("Rotation Z (Turn/Compass): " + int(rz) + "°");
-        
 
     }
     else 
