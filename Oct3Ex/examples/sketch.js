@@ -29,11 +29,11 @@ function preload()
 {
   flipFail = loadImage('flip1.gif');
 
-  ghostWave = loadImage('ghost_wave.gif');
-  ghostSleep = loadImage('ghost_sleep.gif');
-  ghostWake = loadImage('ghost_wokenUp.PNG');
-  ghostFallRight = loadImage('ghost_fall_right.gif');
-  ghostFallLeft = loadImage('ghost_fall_left.gif');
+  ghostWave = loadImage('ghostWave.gif');
+  ghostSleep = loadImage('ghostSleep.gif');
+  ghostWake = loadImage('ghostWake.PNG');
+  ghostFallRight = loadImage('ghostRight.gif');
+  ghostFallLeft = loadImage('ghostLeft.gif');
 }
 
 // ==============================================
