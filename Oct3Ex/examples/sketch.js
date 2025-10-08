@@ -74,8 +74,8 @@ function draw()
     // Change background color based on touch state
     if (isCurrentlyTouching) 
     {
-        /*touchDuration = (millis() - touchStartTime) / 1000;  // Convert to seconds
-        text("TOUCHED",width/2,height/2);
+        touchDuration = (millis() - touchStartTime) / 1000;  // Convert to seconds
+        /*text("TOUCHED",width/2,height/2);
         
         // Display the touch duration
         textSize(24);
@@ -84,9 +84,9 @@ function draw()
         */
        
         // Show wake image for the first 2 seconds, then switch to wave GIF
-        if (touchDuration = 1) {
+        if (touchDuration < 2) {
             image(ghostWake, 0, 0);
-        } else if (touchDuration > 1) {
+        } else {
             image(ghostWave, 0, 0);
         }
 
