@@ -69,7 +69,7 @@ function draw()
 {
     background(200, 255, 200);
 
-    // small top message - responsive sizing and wrapping so it fits mobile screens
+     // small top message - responsive sizing and wrapping so it fits mobile screens
     const msg = "Touch screen to wake up the ghost and make her wave! Tilt screen to make her fall over!";
     textAlign(CENTER, TOP);
     textWrap(WORD);
@@ -83,7 +83,9 @@ function draw()
     // draw inside a centered box that is 90% of screen width
     const boxW = width * 0.9;
     const boxH = height * 0.18; // allocate some vertical space for wrapping
-    text(msg, width / 2, 12, boxW, boxH);
+    const boxX = (width - boxW) / 2; // <-- left coord so the box is centered
+    const boxY = 12;
+    text(msg, boxX, boxY, boxW, boxH);
 
     // Tilt threshold (degrees). Adjust to taste.
     const tiltThreshold = 40;
