@@ -68,6 +68,7 @@ function setup() {
 function draw() 
 {
     background(200, 255, 200);
+    text("Touch screen to wake up the ghost and make her wave! Tilt screen to make her fall over!", screenTop, 48);
     
     // Tilt threshold (degrees). Adjust to taste.
 const tiltThreshold = 40;
@@ -85,9 +86,9 @@ if (isCurrentlyTouching)
 
     // Show wake image for the first 2 seconds, then switch to wave GIF
     if (touchDuration < 2) {
-        image(ghostWake, 0, 0);
+        image(ghostWake, CENTER, CENTER);
     } else {
-        image(ghostWave, 0, 0);
+        image(ghostWave, CENTER, CENTER);
     }
 } 
 else 
@@ -95,15 +96,15 @@ else
     // If device is tilted enough, show the appropriate fall GIF.
     if (isFalling) {
         if (ry < -tiltThreshold) {
-            image(ghostFallLeft, 0, 0);
+            image(ghostFallLeft, CENTER, CENTER);
         } else {
-            image(ghostFallRight, 0, 0);
+            image(ghostFallRight, CENTER, CENTER);
         }
     } 
     else 
     {
         // Not touching and not falling -> normal sleep image
-        image(ghostSleep, 0, 0);
+        image(ghostSleep, CENTER, CENTER);
     }
 }
 
