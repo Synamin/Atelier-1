@@ -68,48 +68,65 @@ function setup() {
 function draw() 
 {
     background(200, 255, 200);
-    text("Touch screen to wake up the ghost and make her wave! Tilt screen to make her fall over!", screenTop, 48);
-    
+
+    // small top message
+    textAlign(CENTER, TOP);
+    textSize(18);
+    fill(textColor || 50);
+    text("Touch screen to wake up the ghost and make her wave! Tilt screen to make her fall over!", width/2, 12);
+
     // Tilt threshold (degrees). Adjust to taste.
-const tiltThreshold = 40;
-// Determine if we should be showing a fall animation
-let isFalling = false;
-let ry = 0;
-if (window.sensorsEnabled && !isCurrentlyTouching) {
-    ry = rotationY;
-    isFalling = (ry < -tiltThreshold) || (ry > tiltThreshold);
-}
-
-if (isCurrentlyTouching) 
-{
-    touchDuration = (millis() - touchStartTime) / 1000;  // Convert to seconds
-
-    // Show wake image for the first 2 seconds, then switch to wave GIF
-    if (touchDuration < 2) {
-        image(ghostWake, CENTER, CENTER);
-    } else {
-        image(ghostWave, CENTER, CENTER);
+    const tiltThreshold = 40;
+    // Determine if we should be showing a fall animation
+    let isFalling = false;
+    let ry = 0;
+    if (window.sensorsEnabled && !isCurrentlyTouching) {
+        ry = rotationY;
+        isFalling = (ry < -tiltThreshold) || (ry > tiltThreshold);
     }
-} 
-else 
-{
-    // If device is tilted enough, show the appropriate fall GIF.
-    if (isFalling) {
-        if (ry < -tiltThreshold) {
-            image(ghostFallLeft, CENTER, CENTER);
+
+    if (isCurrentlyTouching) 
+    {
+        touchDuration = (millis() - touchStartTime) / 1000;  // Convert to seconds
+
+        // Show wake image for the first 2 seconds, then switch to wave GIF
+        if (touchDuration < 2) {
+            drawCentered(ghostWake);
         } else {
-            image(ghostFallRight, CENTER, CENTER);
+            drawCentered(ghostWave);
         }
     } 
     else 
     {
-        // Not touching and not falling -> normal sleep image
-        image(ghostSleep, CENTER, CENTER);
+        // If device is tilted enough, show the appropriate fall GIF.
+        if (isFalling) {
+            if (ry < -tiltThreshold) {
+                drawCentered(ghostFallLeft);
+            } else {
+                drawCentered(ghostFallRight);
+            }
+        } 
+        else 
+        {
+            // Not touching and not falling -> normal sleep image
+            drawCentered(ghostSleep);
+        }
     }
-}
 
 // (optional) other non-visual logic / debug can go here
-    
+    function drawCentered(img, maxW = width * 0.9, maxH = height * 0.6) {
+    if (!img) return;
+    push();
+    imageMode(CENTER);
+    // get image natural size (works with p5.Image and createGraphics)
+    const iw = img.width || (img.canvas && img.canvas.width) || 100;
+    const ih = img.height || (img.canvas && img.canvas.height) || 100;
+    const scale = Math.min(maxW / iw, maxH / ih, 1); // don't upscale
+    const w = iw * scale;
+    const h = ih * scale;
+    image(img, width / 2, height / 2, w, h);
+    pop();
+}
 }
 
 // ==============================================
