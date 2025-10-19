@@ -69,11 +69,21 @@ function draw()
 {
     background(200, 255, 200);
 
-    // small top message
+    // small top message - responsive sizing and wrapping so it fits mobile screens
+    const msg = "Touch screen to wake up the ghost and make her wave! Tilt screen to make her fall over!";
     textAlign(CENTER, TOP);
-    textSize(18);
+    textWrap(WORD);
+
+    // scale text size with screen width (clamped)
+    const responsiveSize = constrain(floor(width / 22), 12, 20); // adjust min/max as needed
+    textSize(responsiveSize);
     fill(textColor || 50);
-    text("Touch screen to wake up the ghost and make her wave! Tilt screen to make her fall over!", width/2, 12);
+    noStroke();
+
+    // draw inside a centered box that is 90% of screen width
+    const boxW = width * 0.9;
+    const boxH = height * 0.18; // allocate some vertical space for wrapping
+    text(msg, width / 2, 12, boxW, boxH);
 
     // Tilt threshold (degrees). Adjust to taste.
     const tiltThreshold = 40;
