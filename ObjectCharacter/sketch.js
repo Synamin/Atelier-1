@@ -16,6 +16,9 @@ const ext = '.png';
 let isSpritePressed = false;
 let spriteRect = { x: 0, y: 0, w: 0, h: 0 }; // current drawn sprite bounds
 
+// add a canvas variable so we can safely access canvas.elt
+let canvas;
+
 function preload() {
   // load numbered frames: basePath/prefix + nf(i,pad) + ext
   for (let i = 0; i < FRAME_COUNT; i++) {
@@ -33,7 +36,8 @@ function preload() {
 function setup() {
   // limit pixelDensity to avoid huge canvases on very high-DPI devices (helps memory)
   pixelDensity(1);
-  createCanvas(windowWidth, windowHeight);
+  // store the returned renderer so 'canvas' exists
+  canvas = createCanvas(windowWidth, windowHeight);
   // make image drawing centered by default
   imageMode(CENTER);
   // prevent browser gestures (pinch/scroll) interfering with the sketch on mobile
