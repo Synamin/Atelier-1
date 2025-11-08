@@ -88,12 +88,13 @@ function windowResized() {
 }
 
 function draw() {
-  background(240);
+  // use darker background so white sprites are visible
+  background(30);
 
   // debug overlay so you can see canvas/activity immediately
   push();
   noStroke();
-  fill(0);
+  fill(255);
   textSize(14);
   textAlign(LEFT, TOP);
   text('Canvas OK', 8, 8);
@@ -101,8 +102,17 @@ function draw() {
   text('currentIndex: ' + currentIndex, 8, 44);
   pop();
 
+  // quick sanity test: draw the first loaded frame at a fixed small size top-left
+  if (walkFrames.length > 0) {
+    push();
+    imageMode(CORNER);
+    // draw a small thumbnail so you can inspect the actual image pixels
+    image(walkFrames[0], 8, 80, 120, 120);
+    pop();
+  }
+
   if (walkFrames.length === 0) {
-    fill(60);
+    fill(200);
     textAlign(CENTER, CENTER);
     text('No walk frames found.\nCheck file names and paths.', width/2, height/2);
     return;
@@ -117,6 +127,14 @@ function draw() {
 
   // draw centered and fitted (also updates spriteRect for hit-testing)
   drawCentered(walkFrames[currentIndex]);
+
+  // draw sprite bounds so you can see where the image is being placed
+  push();
+  noFill();
+  strokeWeight(2);
+  stroke(255, 0, 0);
+  rect(spriteRect.x, spriteRect.y, spriteRect.w, spriteRect.h);
+  pop();
 }
 
 // helper: center and fit image into available area, responsive to any mobile screen
