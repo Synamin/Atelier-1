@@ -38,6 +38,10 @@ function setup() {
   pixelDensity(1);
   // store the returned renderer so 'canvas' exists
   canvas = createCanvas(windowWidth, windowHeight);
+
+  console.log('canvas created:', !!canvas, 'size', windowWidth, windowHeight);
+  console.log('frames loaded before filter:', walkFrames.length);
+
   // make image drawing centered by default
   imageMode(CENTER);
   // prevent browser gestures (pinch/scroll) interfering with the sketch on mobile
@@ -47,6 +51,7 @@ function setup() {
 
   // remove any frames that failed to load (null/undefined)
   walkFrames = walkFrames.filter(f => f && f.width && f.height);
+  console.log('frames after filter:', walkFrames.length);
 
   // resize loaded frames to a sensible maximum to reduce memory (keeps aspect ratio)
   if (walkFrames.length > 0) {
@@ -85,8 +90,20 @@ function windowResized() {
 function draw() {
   background(240);
 
+  // debug overlay so you can see canvas/activity immediately
+  push();
+  noStroke();
+  fill(0);
+  textSize(14);
+  textAlign(LEFT, TOP);
+  text('Canvas OK', 8, 8);
+  text('frames: ' + walkFrames.length, 8, 26);
+  text('currentIndex: ' + currentIndex, 8, 44);
+  pop();
+
   if (walkFrames.length === 0) {
     fill(60);
+    textAlign(CENTER, CENTER);
     text('No walk frames found.\nCheck file names and paths.', width/2, height/2);
     return;
   }
