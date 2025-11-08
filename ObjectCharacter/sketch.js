@@ -1,203 +1,248 @@
-// Simple walker animation from a numbered PNG sequence.
-// Configure the loader to match your file names and folder.
+// Autonomous movable character sprite using your PNG sequence (SparkWalk0001..SparkWalk0161)
+// - sprite wanders around on its own
+// - clicking/tapping the sprite briefly speeds movement + animation
+// - responsive sizing for any mobile screen
 
 let walkFrames = [];
-let FRAME_COUNT = 12;      // number of frames in your sequence
-let normalFPS = 12;        // normal playback speed
-let fastFPS = 30;          // faster speed when sprite is pressed
-let currentIndex = 0;
-
-const basePath = 'assets/walk'; // relative to this sketch.js; change if needed
-const prefix = 'walk_';         // e.g. walk_000.png
-const pad = 3;                  // zero-padding length (000, 00, etc.)
+let requestedFrameCount = 161;      // SparkWalk0001 .. SparkWalk0161
+const basePath = 'assets/walk';
+const prefix = 'SparkWalk';
+const pad = 4;
 const ext = '.png';
 
-// runtime state for pointer interaction
-let isSpritePressed = false;
-let spriteRect = { x: 0, y: 0, w: 0, h: 0 }; // current drawn sprite bounds
-
-// add a canvas variable so we can safely access canvas.elt
 let canvas;
+let char = {
+  x: 0, y: 0,
+  vx: 0, vy: 0,
+  baseSpeed: 140,       // px/s base wander speed
+  speedMultiplier: 1,   // increases while pressed
+  maxSpeed: 800,
+  turnTimer: 0,
+  changeInterval: 1.5,  // seconds between direction changes
+  dirAngle: 0,
+  smoothness: 8,        // how quickly velocity follows target
+  frameIndex: 0,
+  animTime: 0,
+  fps: 12,
+  pressedFps: 28,
+  drawW: 0, drawH: 0
+};
+
+let isPressed = false;   // true while pointer is down on sprite
+let pressTimeout = 0.0;  // seconds remaining for speed boost after tap
+let dragging = false;    // not used for autonomous movement, but remains available
+let spriteRect = { x:0, y:0, w:0, h:0 };
+let attemptedFiles = [];
 
 function preload() {
-  // load numbered frames: basePath/prefix + nf(i,pad) + ext
-  for (let i = 0; i < FRAME_COUNT; i++) {
+  attemptedFiles = [];
+  walkFrames = [];
+  // load SparkWalk0001 .. SparkWalk0161
+  for (let i = 1; i <= requestedFrameCount; i++) {
     const filename = `${basePath}/${prefix}${nf(i, pad)}${ext}`;
-    // loadImage is async in p5 preload but blocks the sketch until loaded
-    walkFrames.push(loadImage(filename, 
-      img => {}, 
-      err => {
-        console.warn('Failed to load', filename, err);
-      }
+    attemptedFiles.push(filename);
+    walkFrames.push(loadImage(filename,
+      img => {},
+      err => { console.warn('loadImage error for', filename); }
     ));
   }
 }
 
 function setup() {
-  // limit pixelDensity to avoid huge canvases on very high-DPI devices (helps memory)
   pixelDensity(1);
-  // store the returned renderer so 'canvas' exists
   canvas = createCanvas(windowWidth, windowHeight);
-
-  console.log('canvas created:', !!canvas, 'size', windowWidth, windowHeight);
-  console.log('frames loaded before filter:', walkFrames.length);
-
-  // make image drawing centered by default
   imageMode(CENTER);
-  // prevent browser gestures (pinch/scroll) interfering with the sketch on mobile
-  if (canvas && canvas.elt) {
-    canvas.elt.style.touchAction = 'none';
-  }
+  if (canvas && canvas.elt) canvas.elt.style.touchAction = 'none';
 
-  // remove any frames that failed to load (null/undefined)
-  walkFrames = walkFrames.filter(f => f && f.width && f.height);
-  console.log('frames after filter:', walkFrames.length);
-
-  // resize loaded frames to a sensible maximum to reduce memory (keeps aspect ratio)
-  if (walkFrames.length > 0) {
-    const maxDim = Math.max(200, Math.floor(Math.min(windowWidth, windowHeight) * 0.8));
-    for (let i = 0; i < walkFrames.length; i++) {
-      const img = walkFrames[i];
-      if (img.width > maxDim || img.height > maxDim) {
-        img.resize(maxDim, 0); // resize with aspect ratio preserved
-      }
+  // keep placeholders for missing frames so indexing stays stable
+  for (let i = 0; i < walkFrames.length; i++) {
+    const img = walkFrames[i];
+    if (!img || !img.width || !img.height) {
+      const pg = createGraphics(64, 64);
+      pg.background(100);
+      pg.fill(255);
+      pg.textAlign(CENTER, CENTER);
+      pg.textSize(10);
+      pg.text('missing\n' + (i+1), 32, 32);
+      walkFrames[i] = pg;
     }
   }
 
+  // ensure at least one frame
   if (walkFrames.length === 0) {
-    console.warn('No walk frames loaded. Check basePath/prefix/pad/ext and FRAME_COUNT.');
-    textAlign(CENTER, CENTER);
-    textSize(18);
+    const pg = createGraphics(160, 160);
+    pg.background(200,50,50);
+    pg.fill(255);
+    pg.textAlign(CENTER, CENTER);
+    pg.textSize(16);
+    pg.text('NO FRAMES', 80, 80);
+    walkFrames = [pg];
   }
+
+  // downscale large frames for performance
+  const desiredMax = Math.floor(min(windowWidth, windowHeight) * 0.35);
+  for (let i = 0; i < walkFrames.length; i++) {
+    const img = walkFrames[i];
+    if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
+  }
+
+  // init char position and wander direction
+  char.x = width / 2;
+  char.y = height / 2;
+  char.dirAngle = random(TWO_PI);
+  char.changeInterval = random(0.6, 2.2);
+  char.drawW = walkFrames[0].width;
+  char.drawH = walkFrames[0].height;
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
-
-  // Recalculate reasonable size for already-loaded frames on orientation/resize:
-  if (walkFrames.length > 0) {
-    const maxDim = Math.max(200, Math.floor(Math.min(windowWidth, windowHeight) * 0.8));
-    for (let i = 0; i < walkFrames.length; i++) {
-      const img = walkFrames[i];
-      // Only downscale if necessary (resize doesn't enlarge if called with 0 as height)
-      if (img.width > maxDim || img.height > maxDim) {
-        img.resize(maxDim, 0);
-      }
-    }
+  const desiredMax = Math.floor(min(windowWidth, windowHeight) * 0.35);
+  for (let i = 0; i < walkFrames.length; i++) {
+    const img = walkFrames[i];
+    if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
   }
 }
 
 function draw() {
-  // use darker background so white sprites are visible
   background(30);
 
-  // debug overlay so you can see canvas/activity immediately
+  const dt = deltaTime / 1000;
+
+  // autonomous wander: occasionally change direction slightly
+  char.turnTimer += dt;
+  if (char.turnTimer >= char.changeInterval) {
+    char.turnTimer = 0;
+    char.changeInterval = random(0.8, 2.5);
+    // random small turn or big turn sometimes
+    if (random() < 0.14) {
+      char.dirAngle = random(TWO_PI);
+    } else {
+      char.dirAngle += random(-PI / 3, PI / 3);
+    }
+  }
+
+  // compute target velocity from direction and base speed (modified by press)
+  const targetSpeed = char.baseSpeed * char.speedMultiplier;
+  const targetVx = cos(char.dirAngle) * targetSpeed;
+  const targetVy = sin(char.dirAngle) * targetSpeed;
+
+  // smooth velocity toward target
+  const t = 1 - Math.exp(-char.smoothness * dt); // smoothing factor
+  char.vx = lerp(char.vx, targetVx, t);
+  char.vy = lerp(char.vy, targetVy, t);
+
+  // clamp maximum
+  const sp = Math.hypot(char.vx, char.vy);
+  if (sp > char.maxSpeed) {
+    const s = char.maxSpeed / sp;
+    char.vx *= s; char.vy *= s;
+  }
+
+  // integrate position
+  char.x += char.vx * dt;
+  char.y += char.vy * dt;
+
+  // bounce off edges by reflecting direction when hitting bounds
+  const margin = 10;
+  let bounced = false;
+  if (char.x < margin) { char.x = margin; char.dirAngle = PI - char.dirAngle; bounced = true; }
+  if (char.x > width - margin) { char.x = width - margin; char.dirAngle = PI - char.dirAngle; bounced = true; }
+  if (char.y < margin) { char.y = margin; char.dirAngle = -char.dirAngle; bounced = true; }
+  if (char.y > height - margin) { char.y = height - margin; char.dirAngle = -char.dirAngle; bounced = true; }
+  if (bounced) { char.turnTimer = 0; char.changeInterval = random(0.8, 1.6); }
+
+  // press timeout reduces speedMultiplier over time
+  if (pressTimeout > 0) {
+    pressTimeout -= dt;
+    if (pressTimeout <= 0) {
+      pressTimeout = 0;
+      isPressed = false;
+      char.speedMultiplier = 1;
+    }
+  }
+
+  // animation timing and frame selection
+  const moving = Math.hypot(char.vx, char.vy) > 6;
+  const curFps = isPressed ? char.pressedFps : char.fps;
+  char.animTime += dt * (moving ? 1 : 0.4);
+  const total = walkFrames.length;
+  char.frameIndex = floor((char.animTime * curFps) % total);
+
+  // facing: when velocity points left, flip sprite
+  const facingLeft = char.vx < -6;
+
+  // draw main character
+  drawCharacterFrame(walkFrames[char.frameIndex], char.x, char.y, facingLeft);
+
+  // small HUD
   push();
   noStroke();
   fill(255);
-  textSize(14);
+  textSize(12);
   textAlign(LEFT, TOP);
-  text('Canvas OK', 8, 8);
-  text('frames: ' + walkFrames.length, 8, 26);
-  text('currentIndex: ' + currentIndex, 8, 44);
-  pop();
-
-  // quick sanity test: draw the first loaded frame at a fixed small size top-left
-  if (walkFrames.length > 0) {
-    push();
-    imageMode(CORNER);
-    // draw a small thumbnail so you can inspect the actual image pixels
-    image(walkFrames[0], 8, 80, 120, 120);
-    pop();
-  }
-
-  if (walkFrames.length === 0) {
-    fill(200);
-    textAlign(CENTER, CENTER);
-    text('No walk frames found.\nCheck file names and paths.', width/2, height/2);
-    return;
-  }
-
-  // choose FPS based on whether sprite is pressed
-  const fps = isSpritePressed ? fastFPS : normalFPS;
-
-  // advance frame based on time and chosen fps
-  const total = walkFrames.length;
-  currentIndex = floor((millis() / (1000 / fps)) % total);
-
-  // draw centered and fitted (also updates spriteRect for hit-testing)
-  drawCentered(walkFrames[currentIndex]);
-
-  // draw sprite bounds so you can see where the image is being placed
-  push();
-  noFill();
-  strokeWeight(2);
-  stroke(255, 0, 0);
-  rect(spriteRect.x, spriteRect.y, spriteRect.w, spriteRect.h);
+  text(`frames:${walkFrames.length} idx:${char.frameIndex}`, 8, 8);
+  text(`speed x:${nf(char.vx,1,1)} y:${nf(char.vy,1,1)} mult:${nf(char.speedMultiplier,1,2)}`, 8, 24);
   pop();
 }
 
-// helper: center and fit image into available area, responsive to any mobile screen
-function drawCentered(img) {
+function drawCharacterFrame(img, cx, cy, flipped) {
   if (!img) return;
-  push();
-  imageMode(CENTER);
-
-  // Responsive bounding box: use different vertical space depending on orientation
-  const verticalRatio = (width > height) ? 0.7 : 0.55; // landscape gets more vertical room
-  const maxW = width * 0.9;
-  const maxH = height * verticalRatio;
-
+  const maxH = height * 0.35;
+  const maxW = width * 0.5;
   const iw = img.width || 100;
   const ih = img.height || 100;
+  const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.2);
+  const w = iw * scaleFactor;
+  const h = ih * scaleFactor;
+  char.drawW = w; char.drawH = h;
 
-  // compute scale to fit within maxW/maxH; allow slight upscaling (up to 1.2) for small assets
-  const scale = Math.min(maxW / iw, maxH / ih, 1.2);
-  const w = iw * scale;
-  const h = ih * scale;
-
-  const cx = width / 2;
-  // position slightly lower than exact center (so top message area can exist)
-  const cy = height / 2 + height * 0.04;
-
-  image(img, cx, cy, w, h);
+  push();
+  translate(cx, cy);
+  if (flipped) scale(-1, 1);
+  imageMode(CENTER);
+  image(img, 0, 0, w, h);
   pop();
 
-  // update global sprite bounds used for hit-testing
   spriteRect.x = cx - w / 2;
   spriteRect.y = cy - h / 2;
   spriteRect.w = w;
   spriteRect.h = h;
 }
 
-// pointer handlers -------------------------------------------------------
+// clicking/tapping the sprite speeds it up briefly -----------------------
 function mousePressed() {
   if (isPointInRect(mouseX, mouseY, spriteRect)) {
-    isSpritePressed = true;
+    // boost speed + animation briefly
+    isPressed = true;
+    char.speedMultiplier = 2.2;
+    pressTimeout = 0.7; // seconds of boosted speed
+    return false;
   }
 }
 
 function mouseReleased() {
-  isSpritePressed = false;
+  // let timeout handle reset; immediate release can also reset if desired:
+  // isPressed = false; char.speedMultiplier = 1; pressTimeout = 0;
 }
 
 function touchStarted() {
-  // p5 gives touches[] which contains coordinates in canvas space
   const tx = touches && touches.length ? touches[0].x : mouseX;
   const ty = touches && touches.length ? touches[0].y : mouseY;
   if (isPointInRect(tx, ty, spriteRect)) {
-    isSpritePressed = true;
-    return false; // prevent default scrolling on mobile when interacting with sprite
+    isPressed = true;
+    char.speedMultiplier = 2.2;
+    pressTimeout = 0.7;
+    return false;
   }
   return true;
 }
 
 function touchEnded() {
-  isSpritePressed = false;
+  // handled by pressTimeout
   return false;
 }
 
-// utility: point in rect
-function isPointInRect(px, py, rect) {
-  return px >= rect.x && px <= rect.x + rect.w && py >= rect.y && py <= rect.y + rect.h;
+function isPointInRect(px, py, r) {
+  return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
 }

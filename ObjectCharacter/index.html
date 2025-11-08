@@ -1,28 +1,19 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Basic Touch Detection - Mobile p5.js</title>
-    
-    <!-- Basic CSS to remove browser defaults and align canvas -->
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-        }
-    </style>
-    
-    <!-- Load p5.js library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.10/p5.min.js"></script>
-    
-    <!-- Load the mobile p5.js permissions library -->
-    <script src="https://cdn.jsdelivr.net/npm/mobile-p5-permissions@1.4.3/dist/p5.mobile-permissions.min.js"></script>
-    
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Animation Controls - ObjectCharacter</title>
+  <style>
+    body { margin:0; padding:0; overflow:hidden; font-family: sans-serif; -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
+    .controls { position: fixed; left: 8px; right: 8px; bottom: 8px; display:flex; gap:8px; justify-content:center; z-index:10; background: rgba(0,0,0,0.25); padding:6px; border-radius:8px; }
+    .controls button, .controls input, .controls span { font-size:14px; padding:6px 8px; color:#fff; background:transparent; border:1px solid rgba(255,255,255,0.15); border-radius:6px; }
+    .controls input[type="number"]{ background:#fff; color:#000; border:1px solid #ccc; padding:4px; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.10/p5.min.js"></script>
 </head>
 <body>
-    <!-- Load the p5.js sketch (use a relative path since index.html is already in the folder) -->
-    <script src="./sketch.js"></script>
+  <div class="controls" id="controls"></div>
+  <script src="sketch.js"></script>
 </body>
 </html>
