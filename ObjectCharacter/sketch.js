@@ -143,14 +143,63 @@ function draw() {
   char.x += char.vx * dt;
   char.y += char.vy * dt;
 
-  // bounce off edges by reflecting direction when hitting bounds
-  const margin = 10;
-  let bounced = false;
-  if (char.x < margin) { char.x = margin; char.dirAngle = PI - char.dirAngle; bounced = true; }
-  if (char.x > width - margin) { char.x = width - margin; char.dirAngle = PI - char.dirAngle; bounced = true; }
-  if (char.y < margin) { char.y = margin; char.dirAngle = -char.dirAngle; bounced = true; }
-  if (char.y > height - margin) { char.y = height - margin; char.dirAngle = -char.dirAngle; bounced = true; }
-  if (bounced) { char.turnTimer = 0; char.changeInterval = random(0.8, 1.6); }
+  // --- COLLISION: bounce when sprite touches screen edges (uses current frame draw size) ---
+  {
+    const imgForSize = walkFrames[char.frameIndex] || walkFrames[0];
+    const iw = imgForSize.width || 100;
+    const ih = imgForSize.height || 100;
+    const maxH = height * 0.35;
+    const maxW = width * 0.5;
+    const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.2);
+    const w = iw * scaleFactor;
+    const h = ih * scaleFactor;
+    const halfW = w * 0.5;
+    const halfH = h * 0.5;
+
+    const leftLimit = halfW;
+    const rightLimit = width - halfW;
+    const topLimit = halfH;
+    const bottomLimit = height - halfH;
+
+    let bounced = false;
+
+    // Left / Right collisions
+    if (char.x < leftLimit) {
+      char.x = leftLimit;
+      char.dirAngle = PI - char.dirAngle;
+      char.vx = Math.abs(char.vx) * 0.6; // push right and dampen
+      char.vy *= 0.8;
+      bounced = true;
+    } else if (char.x > rightLimit) {
+      char.x = rightLimit;
+      char.dirAngle = PI - char.dirAngle;
+      char.vx = -Math.abs(char.vx) * 0.6; // push left and dampen
+      char.vy *= 0.8;
+      bounced = true;
+    }
+
+    // Top / Bottom collisions
+    if (char.y < topLimit) {
+      char.y = topLimit;
+      char.dirAngle = -char.dirAngle;
+      char.vy = Math.abs(char.vy) * 0.6; // push down and dampen
+      char.vx *= 0.8;
+      bounced = true;
+    } else if (char.y > bottomLimit) {
+      char.y = bottomLimit;
+      char.dirAngle = -char.dirAngle;
+      char.vy = -Math.abs(char.vy) * 0.6; // push up and dampen
+      char.vx *= 0.8;
+      bounced = true;
+    }
+
+    if (bounced) {
+      char.dirAngle += random(-0.25, 0.25);
+      char.turnTimer = 0;
+      char.changeInterval = random(0.8, 1.6);
+    }
+  }
+  // --- end COLLISION ---
 
   // press timeout reduces speedMultiplier over time
   if (pressTimeout > 0) {
