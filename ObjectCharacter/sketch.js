@@ -28,6 +28,15 @@ let char = {
   drawW: 0, drawH: 0
 };
 
+// NEW: frustration parameters (starts at 0)
+let frustration = 0;                 // current frustration level (starts 0)
+const frustrationIncrease = 10;      // added when clicked/tapped
+const frustrationDecay = 5;          // decay per second when left alone (units/sec)
+
+// NEW: tick-based decay (1 point every 3 seconds)
+const frustrationTickInterval = 3.0; // seconds per -1
+let frustrationTickTimer = 0.0;
+
 let isPressed = false;   // true while pointer is down on sprite
 let pressTimeout = 0.0;  // seconds remaining for speed boost after tap
 let dragging = false;    // not used for autonomous movement, but remains available
@@ -108,6 +117,18 @@ function draw() {
   background(30);
 
   const dt = deltaTime / 1000;
+
+  // --- frustration tick decay: decrease by 1 every frustrationTickInterval seconds when not pressed
+  if (!isPressed && frustration > 0) {
+    frustrationTickTimer += dt;
+    while (frustrationTickTimer >= frustrationTickInterval && frustration > 0) {
+      frustration = max(0, frustration - 1);
+      frustrationTickTimer -= frustrationTickInterval;
+    }
+  } else if (isPressed) {
+    // optionally pause tick accumulation while pressed
+    // (keep timer as-is so decay resumes where it left off)
+  }
 
   // autonomous wander: occasionally change direction slightly
   char.turnTimer += dt;
@@ -235,8 +256,9 @@ function draw() {
   fill(255);
   textSize(12);
   textAlign(LEFT, TOP);
-  text(`frames:${walkFrames.length} idx:${char.frameIndex}`, 8, 8);
-  text(`speed x:${nf(char.vx,1,1)} y:${nf(char.vy,1,1)} mult:${nf(char.speedMultiplier,1,2)}`, 8, 24);
+  text(`frames: ${walkFrames.length}  idx: ${char.frameIndex}`, 8, 8);
+  text(`speed x: ${nf(char.vx,1,1)}  y: ${nf(char.vy,1,1)}  mult: ${nf(char.speedMultiplier,1,2)}`, 8, 24);
+  text(`frustration: ${floor(frustration)}`, 8, 40); // added frustration display
   pop();
 }
 
@@ -271,6 +293,7 @@ function mousePressed() {
     isPressed = true;
     char.speedMultiplier = 2.2;
     pressTimeout = 0.7; // seconds of boosted speed
+    frustration += frustrationIncrease;
     return false;
   }
 }
@@ -287,6 +310,7 @@ function touchStarted() {
     isPressed = true;
     char.speedMultiplier = 2.2;
     pressTimeout = 0.7;
+    frustration += frustrationIncrease;
     return false;
   }
   return true;
