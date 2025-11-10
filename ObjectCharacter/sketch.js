@@ -153,13 +153,18 @@ function draw() {
     const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.2);
     const w = iw * scaleFactor;
     const h = ih * scaleFactor;
-    const halfW = w * 0.5;
-    const halfH = h * 0.5;
 
-    const leftLimit = halfW;
-    const rightLimit = width - halfW;
-    const topLimit = halfH;
-    const bottomLimit = height - halfH;
+    // use visible (non-transparent) portion for collision so sprite visually touches edge
+    const pad = computeVisiblePadding(imgForSize);
+    const visibleDrawW = w * (pad.visibleW / iw);
+    const visibleDrawH = h * (pad.visibleH / ih);
+    const halfVisibleW = visibleDrawW * 0.5;
+    const halfVisibleH = visibleDrawH * 0.5;
+
+    const leftLimit = halfVisibleW;
+    const rightLimit = width - halfVisibleW;
+    const topLimit = halfVisibleH;
+    const bottomLimit = height - halfVisibleH;
 
     let bounced = false;
 
@@ -167,13 +172,13 @@ function draw() {
     if (char.x < leftLimit) {
       char.x = leftLimit;
       char.dirAngle = PI - char.dirAngle;
-      char.vx = Math.abs(char.vx) * 0.6; // push right and dampen
+      char.vx = Math.abs(char.vx) * 0.6;
       char.vy *= 0.8;
       bounced = true;
     } else if (char.x > rightLimit) {
       char.x = rightLimit;
       char.dirAngle = PI - char.dirAngle;
-      char.vx = -Math.abs(char.vx) * 0.6; // push left and dampen
+      char.vx = -Math.abs(char.vx) * 0.6;
       char.vy *= 0.8;
       bounced = true;
     }
@@ -182,13 +187,13 @@ function draw() {
     if (char.y < topLimit) {
       char.y = topLimit;
       char.dirAngle = -char.dirAngle;
-      char.vy = Math.abs(char.vy) * 0.6; // push down and dampen
+      char.vy = Math.abs(char.vy) * 0.6;
       char.vx *= 0.8;
       bounced = true;
     } else if (char.y > bottomLimit) {
       char.y = bottomLimit;
       char.dirAngle = -char.dirAngle;
-      char.vy = -Math.abs(char.vy) * 0.6; // push up and dampen
+      char.vy = -Math.abs(char.vy) * 0.6;
       char.vx *= 0.8;
       bounced = true;
     }
@@ -294,4 +299,46 @@ function touchEnded() {
 
 function isPointInRect(px, py, r) {
   return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+}
+
+// cache for computed visible padding per image
+const visiblePaddingCache = new WeakMap();
+
+function computeVisiblePadding(img) {
+  if (!img || !img.width || !img.height) return { visibleW: img ? img.width : 0, visibleH: img ? img.height : 0, leftPad: 0, rightPad: 0, topPad: 0, bottomPad: 0 };
+  if (visiblePaddingCache.has(img)) return visiblePaddingCache.get(img);
+
+  img.loadPixels();
+  const w = img.width, h = img.height;
+  let left = w, right = -1, top = h, bottom = -1;
+  const px = img.pixels;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = 4 * (y * w + x);
+      const a = px[idx + 3];
+      if (a > 10) { // threshold for "visible" pixel
+        if (x < left) left = x;
+        if (x > right) right = x;
+        if (y < top) top = y;
+        if (y > bottom) bottom = y;
+      }
+    }
+  }
+
+  if (right < left) {
+    // fully transparent: fallback to full image size
+    const result = { leftPad: 0, rightPad: 0, topPad: 0, bottomPad: 0, visibleW: w, visibleH: h };
+    visiblePaddingCache.set(img, result);
+    return result;
+  }
+
+  const leftPad = left;
+  const rightPad = w - 1 - right;
+  const topPad = top;
+  const bottomPad = h - 1 - bottom;
+  const visibleW = right - left + 1;
+  const visibleH = bottom - top + 1;
+  const result = { leftPad, rightPad, topPad, bottomPad, visibleW, visibleH };
+  visiblePaddingCache.set(img, result);
+  return result;
 }
