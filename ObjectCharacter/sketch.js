@@ -2,6 +2,7 @@
 // - sprite wanders around on its own
 // - clicking/tapping the sprite briefly speeds movement + animation
 // - responsive sizing for any mobile screen
+// - after 60s without user input, switch to sleep animation and stay in place
 
 let walkFrames = [];
 let requestedFrameCount = 161;      // SparkWalk0001 .. SparkWalk0161
@@ -9,6 +10,14 @@ const basePath = 'assets/walk';
 const prefix = 'SparkWalk';
 const pad = 4;
 const ext = '.png';
+
+// NEW: sleep animation (loaded and stored; used for sleep state)
+let sleepFrames = [];
+let requestedSleepCount = 68;       // SparkSleep0001 .. SparkSleep0068
+const sleepBasePath = 'assets/sleep';
+const sleepPrefix = 'SparkSleep';
+const sleepPad = 4;
+const sleepExt = '.png';
 
 let canvas;
 let char = {
@@ -25,13 +34,13 @@ let char = {
   animTime: 0,
   fps: 12,
   pressedFps: 28,
-  drawW: 0, drawH: 0
+  drawW: 0, drawH: 0,
+  state: 'walk'         // 'walk' or 'sleep'
 };
 
 // NEW: frustration parameters (starts at 0)
 let frustration = 0;                 // current frustration level (starts 0)
 const frustrationIncrease = 10;      // added when clicked/tapped
-const frustrationDecay = 5;          // decay per second when left alone (units/sec)
 
 // NEW: tick-based decay (1 point every 3 seconds)
 const frustrationTickInterval = 3.0; // seconds per -1
@@ -42,6 +51,10 @@ let pressTimeout = 0.0;  // seconds remaining for speed boost after tap
 let dragging = false;    // not used for autonomous movement, but remains available
 let spriteRect = { x:0, y:0, w:0, h:0 };
 let attemptedFiles = [];
+
+// NEW: idle-to-sleep timing based on user input
+const sleepAfterSeconds = 30; // switch to sleep after 30s of no input
+let lastInputTime = 0;        // seconds (set in setup)
 
 function preload() {
   attemptedFiles = [];
@@ -55,6 +68,17 @@ function preload() {
       err => { console.warn('loadImage error for', filename); }
     ));
   }
+
+  // load SparkSleep0001 .. SparkSleep0068
+  sleepFrames = [];
+  for (let i = 1; i <= requestedSleepCount; i++) {
+    const filename = `${sleepBasePath}/${sleepPrefix}${nf(i, sleepPad)}${sleepExt}`;
+    attemptedFiles.push(filename);
+    sleepFrames.push(loadImage(filename,
+      img => {},
+      err => { console.warn('loadImage error for', filename); }
+    ));
+  }
 }
 
 function setup() {
@@ -63,7 +87,10 @@ function setup() {
   imageMode(CENTER);
   if (canvas && canvas.elt) canvas.elt.style.touchAction = 'none';
 
-  // keep placeholders for missing frames so indexing stays stable
+  // set last input time to now
+  lastInputTime = millis() / 1000;
+
+  // keep placeholders for missing walk frames so indexing stays stable
   for (let i = 0; i < walkFrames.length; i++) {
     const img = walkFrames[i];
     if (!img || !img.width || !img.height) {
@@ -77,7 +104,21 @@ function setup() {
     }
   }
 
-  // ensure at least one frame
+  // placeholders for missing sleep frames (keeps stored array consistent)
+  for (let i = 0; i < sleepFrames.length; i++) {
+    const img = sleepFrames[i];
+    if (!img || !img.width || !img.height) {
+      const pg = createGraphics(64, 64);
+      pg.background(80);
+      pg.fill(255);
+      pg.textAlign(CENTER, CENTER);
+      pg.textSize(10);
+      pg.text('sleep\n' + (i+1), 32, 32);
+      sleepFrames[i] = pg;
+    }
+  }
+
+  // ensure at least one walk frame
   if (walkFrames.length === 0) {
     const pg = createGraphics(160, 160);
     pg.background(200,50,50);
@@ -88,10 +129,14 @@ function setup() {
     walkFrames = [pg];
   }
 
-  // downscale large frames for performance
+  // downscale large frames for performance (both walk and sleep)
   const desiredMax = Math.floor(min(windowWidth, windowHeight) * 0.35);
   for (let i = 0; i < walkFrames.length; i++) {
     const img = walkFrames[i];
+    if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
+  }
+  for (let i = 0; i < sleepFrames.length; i++) {
+    const img = sleepFrames[i];
     if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
   }
 
@@ -111,12 +156,17 @@ function windowResized() {
     const img = walkFrames[i];
     if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
   }
+  for (let i = 0; i < sleepFrames.length; i++) {
+    const img = sleepFrames[i];
+    if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
+  }
 }
 
 function draw() {
   background(30);
 
   const dt = deltaTime / 1000;
+  const now = millis() / 1000;
 
   // --- frustration tick decay: decrease by 1 every frustrationTickInterval seconds when not pressed
   if (!isPressed && frustration > 0) {
@@ -125,17 +175,52 @@ function draw() {
       frustration = max(0, frustration - 1);
       frustrationTickTimer -= frustrationTickInterval;
     }
-  } else if (isPressed) {
-    // optionally pause tick accumulation while pressed
-    // (keep timer as-is so decay resumes where it left off)
   }
 
-  // autonomous wander: occasionally change direction slightly
+  // --- SLEEP CHECK: if no input for sleepAfterSeconds, enter sleep state and stay in place
+  if (now - lastInputTime >= sleepAfterSeconds) {
+    if (char.state !== 'sleep') {
+      char.state = 'sleep';
+      // stop movement immediately
+      char.vx = 0;
+      char.vy = 0;
+      // reset animation timing so sleep starts cleanly
+      char.animTime = 0;
+    }
+  } else {
+    // if not sleeping, keep state walking
+    if (char.state === 'sleep') char.state = 'walk';
+  }
+
+  // If sleeping: do not run autonomous movement; just animate sleep frames in place
+  if (char.state === 'sleep') {
+    // animate sleep frames only
+    const animFps = 8; // fixed sleep fps
+    char.animTime += dt;
+    const totalSleep = sleepFrames.length || 1;
+    char.frameIndex = floor((char.animTime * animFps) % totalSleep);
+    // draw sleep frame (no flipping)
+    drawCharacterFrame(sleepFrames[char.frameIndex], char.x, char.y, false);
+
+    // HUD (include state + frustration)
+    push();
+    noStroke();
+    fill(255);
+    textSize(12);
+    textAlign(LEFT, TOP);
+    text(`state: ${char.state}`, 8, 8);
+    text(`frames (walk): ${walkFrames.length}`, 8, 24);
+    text(`frustration: ${floor(frustration)}`, 8, 40);
+    pop();
+
+    return; // skip the rest of movement/update logic
+  }
+
+  // --- autonomous wander (only when not sleeping) ---
   char.turnTimer += dt;
   if (char.turnTimer >= char.changeInterval) {
     char.turnTimer = 0;
     char.changeInterval = random(0.8, 2.5);
-    // random small turn or big turn sometimes
     if (random() < 0.14) {
       char.dirAngle = random(TWO_PI);
     } else {
@@ -237,7 +322,7 @@ function draw() {
     }
   }
 
-  // animation timing and frame selection
+  // animation timing and frame selection (walk frames)
   const moving = Math.hypot(char.vx, char.vy) > 6;
   const curFps = isPressed ? char.pressedFps : char.fps;
   char.animTime += dt * (moving ? 1 : 0.4);
@@ -256,9 +341,10 @@ function draw() {
   fill(255);
   textSize(12);
   textAlign(LEFT, TOP);
-  text(`frames: ${walkFrames.length}  idx: ${char.frameIndex}`, 8, 8);
-  text(`speed x: ${nf(char.vx,1,1)}  y: ${nf(char.vy,1,1)}  mult: ${nf(char.speedMultiplier,1,2)}`, 8, 24);
-  text(`frustration: ${floor(frustration)}`, 8, 40); // added frustration display
+  text(`state: ${char.state}`, 8, 8);
+  text(`frames (walk): ${walkFrames.length}  idx: ${char.frameIndex}`, 8, 24);
+  text(`speed x: ${nf(char.vx,1,1)}  y: ${nf(char.vy,1,1)}  mult: ${nf(char.speedMultiplier,1,2)}`, 8, 40);
+  text(`frustration: ${floor(frustration)}`, 8, 56);
   pop();
 }
 
@@ -288,29 +374,39 @@ function drawCharacterFrame(img, cx, cy, flipped) {
 
 // clicking/tapping the sprite speeds it up briefly -----------------------
 function mousePressed() {
+  lastInputTime = millis() / 1000; // record activity
   if (isPointInRect(mouseX, mouseY, spriteRect)) {
     // boost speed + animation briefly
     isPressed = true;
     char.speedMultiplier = 2.2;
     pressTimeout = 0.7; // seconds of boosted speed
-    frustration += frustrationIncrease;
+    frustration = min(100, frustration + frustrationIncrease);
+    // wake from sleep if was sleeping
+    if (char.state === 'sleep') {
+      char.state = 'walk';
+      char.animTime = 0;
+    }
     return false;
   }
 }
 
 function mouseReleased() {
-  // let timeout handle reset; immediate release can also reset if desired:
-  // isPressed = false; char.speedMultiplier = 1; pressTimeout = 0;
+  // let timeout handle reset
 }
 
 function touchStarted() {
+  lastInputTime = millis() / 1000; // record activity
   const tx = touches && touches.length ? touches[0].x : mouseX;
   const ty = touches && touches.length ? touches[0].y : mouseY;
   if (isPointInRect(tx, ty, spriteRect)) {
     isPressed = true;
     char.speedMultiplier = 2.2;
     pressTimeout = 0.7;
-    frustration += frustrationIncrease;
+    frustration = min(100, frustration + frustrationIncrease);
+    if (char.state === 'sleep') {
+      char.state = 'walk';
+      char.animTime = 0;
+    }
     return false;
   }
   return true;
@@ -319,6 +415,14 @@ function touchStarted() {
 function touchEnded() {
   // handled by pressTimeout
   return false;
+}
+
+function keyPressed() {
+  lastInputTime = millis() / 1000; // keyboard counts as input and wakes
+  if (char.state === 'sleep') {
+    char.state = 'walk';
+    char.animTime = 0;
+  }
 }
 
 function isPointInRect(px, py, r) {
