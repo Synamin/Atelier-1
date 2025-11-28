@@ -2,7 +2,13 @@
 // - sprite wanders around on its own
 // - clicking/tapping the sprite briefly speeds movement + animation
 // - responsive sizing for any mobile screen
-// - after 60s without user input, switch to sleep animation and stay in place
+// - after 30s without user input, switch to sleep animation and stay in place
+// - when frustration reaches 100, play angry animation for 10s and disable interaction
+// - additional animations: sleep, angry, happy
+// - speed boost on touches, decay after idle, hold behavior at high frustration
+
+let canvas;
+let lastInputTime = 0;
 
 let walkFrames = [];
 let requestedFrameCount = 161;      // SparkWalk0001 .. SparkWalk0161
@@ -11,7 +17,7 @@ const prefix = 'SparkWalk';
 const pad = 4;
 const ext = '.png';
 
-// NEW: sleep animation (loaded and stored; used for sleep state)
+// sleep animation
 let sleepFrames = [];
 let requestedSleepCount = 68;       // SparkSleep0001 .. SparkSleep0068
 const sleepBasePath = 'assets/sleep';
@@ -19,42 +25,52 @@ const sleepPrefix = 'SparkSleep';
 const sleepPad = 4;
 const sleepExt = '.png';
 
-let canvas;
-let char = {
-  x: 0, y: 0,
-  vx: 0, vy: 0,
-  baseSpeed: 140,       // px/s base wander speed
-  speedMultiplier: 1,   // increases while pressed
-  maxSpeed: 800,
-  turnTimer: 0,
-  changeInterval: 1.5,  // seconds between direction changes
-  dirAngle: 0,
-  smoothness: 8,        // how quickly velocity follows target
-  frameIndex: 0,
-  animTime: 0,
-  fps: 12,
-  pressedFps: 28,
-  drawW: 0, drawH: 0,
-  state: 'walk'         // 'walk' or 'sleep'
-};
+// angry animation
+let angryFrames = [];
+let requestedAngryCount = 85;       // SparkAngry0001 .. SparkAngry0085
+const angryBasePath = 'assets/angry';
+const angryPrefix = 'SparkAngry';
+const angryPad = 4;
+const angryExt = '.png';
 
-// NEW: frustration parameters (starts at 0)
-let frustration = 0;                 // current frustration level (starts 0)
-const frustrationIncrease = 10;      // added when clicked/tapped
+// happy animation
+let happyFrames = [];
+let requestedHappyCount = 200;      // SparkHappy0001 .. SparkHappy0200
+const happyBasePath = 'assets/happy';
+const happyPrefix = 'SparkHappy';
+const happyPad = 4;
+const happyExt = '.png';
 
-// NEW: tick-based decay (1 point every 3 seconds)
-const frustrationTickInterval = 3.0; // seconds per -1
-let frustrationTickTimer = 0.0;
+let player;
 
-let isPressed = false;   // true while pointer is down on sprite
-let pressTimeout = 0.0;  // seconds remaining for speed boost after tap
-let dragging = false;    // not used for autonomous movement, but remains available
-let spriteRect = { x:0, y:0, w:0, h:0 };
-let attemptedFiles = [];
+// Angry state control
+let isAngry = false;
+let angryTimer = 0;
+const angryDuration = 10.0;   // seconds to stay angry
+let angryAnimTime = 0;
+const angryFps = 18;
 
-// NEW: idle-to-sleep timing based on user input
-const sleepAfterSeconds = 30; // switch to sleep after 30s of no input
-let lastInputTime = 0;        // seconds (set in setup)
+// NEW: incremental speed boost on touch, then decay to default after 10s idle
+let defaultBaseSpeed = null;
+let speedBoost = 0;
+const speedBoostPerTouch = 30;   // increase each touch (px/s)
+const speedBoostMax = 300;       // cap boost
+const speedDecayDelay = 10.0;    // seconds of no touch before decay starts
+const speedDecayRate = 30;       // px/s decay rate while decaying
+let lastSpeedInputTime = 0;
+
+// NEW: hold behavior threshold: at or above this frustration the character keeps current speed and never sleeps
+const frustrationHoldThreshold = 70;
+
+// sleep timeout
+const sleepAfterSeconds = 30; // seconds without input to go to sleep
+
+// NEW: save/restore speed across angry mode
+let savedSpeedBoost = 0;
+let savedPlayerBaseSpeed = null;
+
+// NEW: factor to use when frustration >= threshold (keeps character moving fast)
+const holdBoostFactor = 1.6;
 
 function preload() {
   attemptedFiles = [];
@@ -79,18 +95,60 @@ function preload() {
       err => { console.warn('loadImage error for', filename); }
     ));
   }
+
+  // load SparkAngry0001 .. SparkAngry0085
+  angryFrames = [];
+  for (let i = 1; i <= requestedAngryCount; i++) {
+    const filename = `${angryBasePath}/${angryPrefix}${nf(i, angryPad)}${angryExt}`;
+    attemptedFiles.push(filename);
+    angryFrames.push(loadImage(filename,
+      img => {},
+      err => { console.warn('loadImage error for', filename); }
+    ));
+  }
+
+  // load SparkHappy0001 .. SparkHappy0200
+  happyFrames = [];
+  for (let i = 1; i <= requestedHappyCount; i++) {
+    const filename = `${happyBasePath}/${happyPrefix}${nf(i, happyPad)}${happyExt}`;
+    attemptedFiles.push(filename);
+    happyFrames.push(loadImage(filename,
+      img => {},
+      err => { console.warn('loadImage error for', filename); }
+    ));
+  }
 }
 
 function setup() {
   pixelDensity(1);
   canvas = createCanvas(windowWidth, windowHeight);
   imageMode(CENTER);
-  if (canvas && canvas.elt) canvas.elt.style.touchAction = 'none';
+
+  // remove white page/canvas border and ensure canvas sits flush
+  document.body.style.margin = '0';
+  document.body.style.padding = '0';
+  // match body background to sketch background so no white shows through
+  document.body.style.background = '#1e1e1e';
+
+  // ensure canvas element has no margin/border and is block-level
+  if (canvas) {
+    canvas.style('display', 'block');
+    canvas.style('margin', '0');
+    canvas.style('padding', '0');
+    canvas.style('border', '0');
+  }
+  if (canvas && canvas.elt) {
+    canvas.elt.style.touchAction = 'none';
+    canvas.elt.style.display = 'block';
+    canvas.elt.style.margin = '0';
+    canvas.elt.style.padding = '0';
+    canvas.elt.style.border = '0';
+  }
 
   // set last input time to now
   lastInputTime = millis() / 1000;
 
-  // keep placeholders for missing walk frames so indexing stays stable
+  // placeholders for missing frames
   for (let i = 0; i < walkFrames.length; i++) {
     const img = walkFrames[i];
     if (!img || !img.width || !img.height) {
@@ -103,8 +161,6 @@ function setup() {
       walkFrames[i] = pg;
     }
   }
-
-  // placeholders for missing sleep frames (keeps stored array consistent)
   for (let i = 0; i < sleepFrames.length; i++) {
     const img = sleepFrames[i];
     if (!img || !img.width || !img.height) {
@@ -115,6 +171,30 @@ function setup() {
       pg.textSize(10);
       pg.text('sleep\n' + (i+1), 32, 32);
       sleepFrames[i] = pg;
+    }
+  }
+  for (let i = 0; i < angryFrames.length; i++) {
+    const img = angryFrames[i];
+    if (!img || !img.width || !img.height) {
+      const pg = createGraphics(64, 64);
+      pg.background(120, 20, 20);
+      pg.fill(255);
+      pg.textAlign(CENTER, CENTER);
+      pg.textSize(10);
+      pg.text('angry\n' + (i+1), 32, 32);
+      angryFrames[i] = pg;
+    }
+  }
+  for (let i = 0; i < happyFrames.length; i++) {
+    const img = happyFrames[i];
+    if (!img || !img.width || !img.height) {
+      const pg = createGraphics(64, 64);
+      pg.background(20, 120, 20);
+      pg.fill(255);
+      pg.textAlign(CENTER, CENTER);
+      pg.textSize(10);
+      pg.text('happy\n' + (i+1), 32, 32);
+      happyFrames[i] = pg;
     }
   }
 
@@ -129,7 +209,7 @@ function setup() {
     walkFrames = [pg];
   }
 
-  // downscale large frames for performance (both walk and sleep)
+  // downscale large frames for performance (walk, sleep, angry, happy)
   const desiredMax = Math.floor(min(windowWidth, windowHeight) * 0.35);
   for (let i = 0; i < walkFrames.length; i++) {
     const img = walkFrames[i];
@@ -139,14 +219,20 @@ function setup() {
     const img = sleepFrames[i];
     if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
   }
+  for (let i = 0; i < angryFrames.length; i++) {
+    const img = angryFrames[i];
+    if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
+  }
+  for (let i = 0; i < happyFrames.length; i++) {
+    const img = happyFrames[i];
+    if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
+  }
 
-  // init char position and wander direction
-  char.x = width / 2;
-  char.y = height / 2;
-  char.dirAngle = random(TWO_PI);
-  char.changeInterval = random(0.6, 2.2);
-  char.drawW = walkFrames[0].width;
-  char.drawH = walkFrames[0].height;
+  player = new Character(width/2, height/2, walkFrames, sleepFrames);
+
+  // initialize speed baseline
+  defaultBaseSpeed = player.baseSpeed || 140;
+  lastSpeedInputTime = millis() / 1000;
 }
 
 function windowResized() {
@@ -160,273 +246,164 @@ function windowResized() {
     const img = sleepFrames[i];
     if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
   }
+  for (let i = 0; i < angryFrames.length; i++) {
+    const img = angryFrames[i];
+    if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
+  }
+  for (let i = 0; i < happyFrames.length; i++) {
+    const img = happyFrames[i];
+    if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
+  }
 }
 
 function draw() {
   background(30);
-
   const dt = deltaTime / 1000;
   const now = millis() / 1000;
 
-  // --- frustration tick decay: decrease by 1 every frustrationTickInterval seconds when not pressed
-  if (!isPressed && frustration > 0) {
-    frustrationTickTimer += dt;
-    while (frustrationTickTimer >= frustrationTickInterval && frustration > 0) {
-      frustration = max(0, frustration - 1);
-      frustrationTickTimer -= frustrationTickInterval;
+  // set base speed depending on frustration hold state
+  if (!isAngry && player) {
+    if (player.frustration >= frustrationHoldThreshold) {
+      // lock to a faster base speed while in "hold" (frustration >= 70)
+      player.baseSpeed = (defaultBaseSpeed || 140) * holdBoostFactor;
+    } else {
+      // normal idle base speed (temporary boosts come from player.onClick / pressTimeout)
+      player.baseSpeed = defaultBaseSpeed || 140;
     }
   }
 
-  // --- SLEEP CHECK: if no input for sleepAfterSeconds, enter sleep state and stay in place
-  if (now - lastInputTime >= sleepAfterSeconds) {
-    if (char.state !== 'sleep') {
-      char.state = 'sleep';
-      // stop movement immediately
-      char.vx = 0;
-      char.vy = 0;
-      // reset animation timing so sleep starts cleanly
-      char.animTime = 0;
-    }
-  } else {
-    // if not sleeping, keep state walking
-    if (char.state === 'sleep') char.state = 'walk';
+  // --- trigger angry mode when frustration reaches 100 ---
+  if (!isAngry && player && player.frustration >= 100) {
+    // save current speed state so it can be restored after angry finishes
+    savedSpeedBoost = speedBoost;
+    savedPlayerBaseSpeed = player.baseSpeed;
+
+    isAngry = true;
+    angryTimer = angryDuration;
+    angryAnimTime = 0;
+    // freeze player and disable interaction state
+    player.vx = 0;
+    player.vy = 0;
+    player.isPressed = false;
+    // avoid immediate retrigger while angry
+    player.frustration = 0;
+
+    // prevent immediate decay while angry (keeps timers consistent)
+    lastSpeedInputTime = millis() / 1000;
   }
 
-  // If sleeping: do not run autonomous movement; just animate sleep frames in place
-  if (char.state === 'sleep') {
-    // animate sleep frames only
-    const animFps = 8; // fixed sleep fps
-    char.animTime += dt;
-    const totalSleep = sleepFrames.length || 1;
-    char.frameIndex = floor((char.animTime * animFps) % totalSleep);
-    // draw sleep frame (no flipping)
-    drawCharacterFrame(sleepFrames[char.frameIndex], char.x, char.y, false);
+  if (isAngry) {
+    // Angry mode: animate angryFrames at player's position, disable player update/draw & interactions
+    angryTimer -= dt;
+    angryAnimTime += dt;
+    const total = angryFrames.length || 1;
+    const idx = floor((angryAnimTime * angryFps) % total);
+    const img = angryFrames[idx];
 
-    // HUD (include state + frustration)
+    // compute draw size similar to drawCharacterFrame
+    if (img) {
+      const iw = img.width || 100;
+      const ih = img.height || 100;
+      const maxH = height * 0.35;
+      const maxW = width * 0.5;
+      const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.2);
+      const w = iw * scaleFactor;
+      const h = ih * scaleFactor;
+      push();
+      imageMode(CENTER);
+      translate(player.x, player.y);
+      image(img, 0, 0, w, h);
+      pop();
+    }
+
+    // HUD show angry and remaining time
     push();
     noStroke();
-    fill(255);
+    fill(255, 150, 150);
     textSize(12);
     textAlign(LEFT, TOP);
-    text(`state: ${char.state}`, 8, 8);
-    text(`frames (walk): ${walkFrames.length}`, 8, 24);
-    text(`frustration: ${floor(frustration)}`, 8, 40);
+    // show countdown (seconds remaining) next to the angry label
+    const timeLeft = max(0, angryTimer);
+    text(`About-to-explode-level ANGRY  ${nf(timeLeft, 1, 1)}s`, 8, 8);
     pop();
 
-    return; // skip the rest of movement/update logic
+    if (angryTimer <= 0) {
+      isAngry = false;
+      angryTimer = 0;
+      angryAnimTime = 0;
+      // ensure player resumes normal state and set frustration to 50
+      if (player) {
+        player.vx = 0;
+        player.vy = 0;
+        player.isPressed = false;
+        player.frustration = 50; // set frustration to 50 after angry finishes
+
+        // restore speed state from before angry mode so speed doesn't drop
+        speedBoost = savedSpeedBoost;
+        if (savedPlayerBaseSpeed != null) {
+          player.baseSpeed = savedPlayerBaseSpeed;
+        } else {
+          player.baseSpeed = (defaultBaseSpeed || 140) + speedBoost;
+        }
+        // reset decay timer so boost doesn't immediately decay
+        lastSpeedInputTime = millis() / 1000;
+
+        // KEEP THE CHARACTER MOVING: restore walk state and reset activity timer
+        player.state = 'walk';
+        player.animTime = 0;
+        lastInputTime = millis() / 1000; // prevents immediate sleep after angry ends
+      }
+    }
+    return; // skip normal update/draw while angry
   }
 
-  // --- autonomous wander (only when not sleeping) ---
-  char.turnTimer += dt;
-  if (char.turnTimer >= char.changeInterval) {
-    char.turnTimer = 0;
-    char.changeInterval = random(0.8, 2.5);
-    if (random() < 0.14) {
-      char.dirAngle = random(TWO_PI);
-    } else {
-      char.dirAngle += random(-PI / 3, PI / 3);
-    }
-  }
+  // normal operation when not angry
+  player.update(dt);
+  player.draw();
 
-  // compute target velocity from direction and base speed (modified by press)
-  const targetSpeed = char.baseSpeed * char.speedMultiplier;
-  const targetVx = cos(char.dirAngle) * targetSpeed;
-  const targetVy = sin(char.dirAngle) * targetSpeed;
-
-  // smooth velocity toward target
-  const t = 1 - Math.exp(-char.smoothness * dt); // smoothing factor
-  char.vx = lerp(char.vx, targetVx, t);
-  char.vy = lerp(char.vy, targetVy, t);
-
-  // clamp maximum
-  const sp = Math.hypot(char.vx, char.vy);
-  if (sp > char.maxSpeed) {
-    const s = char.maxSpeed / sp;
-    char.vx *= s; char.vy *= s;
-  }
-
-  // integrate position
-  char.x += char.vx * dt;
-  char.y += char.vy * dt;
-
-  // --- COLLISION: bounce when sprite touches screen edges (uses current frame draw size) ---
-  {
-    const imgForSize = walkFrames[char.frameIndex] || walkFrames[0];
-    const iw = imgForSize.width || 100;
-    const ih = imgForSize.height || 100;
-    const maxH = height * 0.35;
-    const maxW = width * 0.5;
-    const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.2);
-    const w = iw * scaleFactor;
-    const h = ih * scaleFactor;
-
-    // use visible (non-transparent) portion for collision so sprite visually touches edge
-    const pad = computeVisiblePadding(imgForSize);
-    const visibleDrawW = w * (pad.visibleW / iw);
-    const visibleDrawH = h * (pad.visibleH / ih);
-    const halfVisibleW = visibleDrawW * 0.5;
-    const halfVisibleH = visibleDrawH * 0.5;
-
-    const leftLimit = halfVisibleW;
-    const rightLimit = width - halfVisibleW;
-    const topLimit = halfVisibleH;
-    const bottomLimit = height - halfVisibleH;
-
-    let bounced = false;
-
-    // Left / Right collisions
-    if (char.x < leftLimit) {
-      char.x = leftLimit;
-      char.dirAngle = PI - char.dirAngle;
-      char.vx = Math.abs(char.vx) * 0.6;
-      char.vy *= 0.8;
-      bounced = true;
-    } else if (char.x > rightLimit) {
-      char.x = rightLimit;
-      char.dirAngle = PI - char.dirAngle;
-      char.vx = -Math.abs(char.vx) * 0.6;
-      char.vy *= 0.8;
-      bounced = true;
-    }
-
-    // Top / Bottom collisions
-    if (char.y < topLimit) {
-      char.y = topLimit;
-      char.dirAngle = -char.dirAngle;
-      char.vy = Math.abs(char.vy) * 0.6;
-      char.vx *= 0.8;
-      bounced = true;
-    } else if (char.y > bottomLimit) {
-      char.y = bottomLimit;
-      char.dirAngle = -char.dirAngle;
-      char.vy = -Math.abs(char.vy) * 0.6;
-      char.vx *= 0.8;
-      bounced = true;
-    }
-
-    if (bounced) {
-      char.dirAngle += random(-0.25, 0.25);
-      char.turnTimer = 0;
-      char.changeInterval = random(0.8, 1.6);
-    }
-  }
-  // --- end COLLISION ---
-
-  // press timeout reduces speedMultiplier over time
-  if (pressTimeout > 0) {
-    pressTimeout -= dt;
-    if (pressTimeout <= 0) {
-      pressTimeout = 0;
-      isPressed = false;
-      char.speedMultiplier = 1;
-    }
-  }
-
-  // animation timing and frame selection (walk frames)
-  const moving = Math.hypot(char.vx, char.vy) > 6;
-  const curFps = isPressed ? char.pressedFps : char.fps;
-  char.animTime += dt * (moving ? 1 : 0.4);
-  const total = walkFrames.length;
-  char.frameIndex = floor((char.animTime * curFps) % total);
-
-  // facing: when velocity points left, flip sprite
-  const facingLeft = char.vx < -6;
-
-  // draw main character
-  drawCharacterFrame(walkFrames[char.frameIndex], char.x, char.y, facingLeft);
-
-  // small HUD
+  // HUD
   push();
   noStroke();
   fill(255);
   textSize(12);
   textAlign(LEFT, TOP);
-  text(`state: ${char.state}`, 8, 8);
-  text(`frames (walk): ${walkFrames.length}  idx: ${char.frameIndex}`, 8, 24);
-  text(`speed x: ${nf(char.vx,1,1)}  y: ${nf(char.vy,1,1)}  mult: ${nf(char.speedMultiplier,1,2)}`, 8, 40);
-  text(`frustration: ${floor(frustration)}`, 8, 56);
+  text(`state: ${player.state}`, 8, 8);
+  text(`frames (walk): ${walkFrames.length}  idx: ${player.frameIndex}`, 8, 24);
+  text(`frustration: ${floor(player.frustration)}`, 8, 40);
   pop();
 }
 
-function drawCharacterFrame(img, cx, cy, flipped) {
-  if (!img) return;
-  const maxH = height * 0.35;
-  const maxW = width * 0.5;
-  const iw = img.width || 100;
-  const ih = img.height || 100;
-  const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.2);
-  const w = iw * scaleFactor;
-  const h = ih * scaleFactor;
-  char.drawW = w; char.drawH = h;
-
-  push();
-  translate(cx, cy);
-  if (flipped) scale(-1, 1);
-  imageMode(CENTER);
-  image(img, 0, 0, w, h);
-  pop();
-
-  spriteRect.x = cx - w / 2;
-  spriteRect.y = cy - h / 2;
-  spriteRect.w = w;
-  spriteRect.h = h;
+// clicking/tapping handlers: make boost temporary only
+function increaseSpeedBoost() {
+  // no persistent speedBoost anymore — touch only yields temporary speed via player.onClick()
+  lastSpeedInputTime = millis() / 1000;
 }
 
-// clicking/tapping the sprite speeds it up briefly -----------------------
 function mousePressed() {
-  lastInputTime = millis() / 1000; // record activity
-  if (isPointInRect(mouseX, mouseY, spriteRect)) {
-    // boost speed + animation briefly
-    isPressed = true;
-    char.speedMultiplier = 2.2;
-    pressTimeout = 0.7; // seconds of boosted speed
-    frustration = min(100, frustration + frustrationIncrease);
-    // wake from sleep if was sleeping
-    if (char.state === 'sleep') {
-      char.state = 'walk';
-      char.animTime = 0;
-    }
-    return false;
+  // disable interaction while angry
+  if (isAngry) return false;
+  if (player && player.isPointInside(mouseX, mouseY)) {
+    player.onClick();
+    increaseSpeedBoost();
   }
+  if (player) player.setLastInput();
 }
-
-function mouseReleased() {
-  // let timeout handle reset
-}
-
 function touchStarted() {
-  lastInputTime = millis() / 1000; // record activity
-  const tx = touches && touches.length ? touches[0].x : mouseX;
-  const ty = touches && touches.length ? touches[0].y : mouseY;
-  if (isPointInRect(tx, ty, spriteRect)) {
-    isPressed = true;
-    char.speedMultiplier = 2.2;
-    pressTimeout = 0.7;
-    frustration = min(100, frustration + frustrationIncrease);
-    if (char.state === 'sleep') {
-      char.state = 'walk';
-      char.animTime = 0;
-    }
-    return false;
+  // disable interaction while angry
+  if (isAngry) return false;
+  const tx = touches?.[0]?.x ?? mouseX;
+  const ty = touches?.[0]?.y ?? mouseY;
+  if (player && player.isPointInside(tx, ty)) {
+    player.onClick();
+    increaseSpeedBoost();
   }
-  return true;
-}
-
-function touchEnded() {
-  // handled by pressTimeout
+  if (player) player.setLastInput();
   return false;
 }
-
 function keyPressed() {
-  lastInputTime = millis() / 1000; // keyboard counts as input and wakes
-  if (char.state === 'sleep') {
-    char.state = 'walk';
-    char.animTime = 0;
-  }
-}
-
-function isPointInRect(px, py, r) {
-  return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+  // ignore key input during angry period
+  if (isAngry) return;
+  if (player) player.setLastInput();
 }
 
 // cache for computed visible padding per image

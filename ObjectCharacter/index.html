@@ -1,19 +1,17 @@
 <!doctype html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Animation Controls - ObjectCharacter</title>
-  <style>
-    body { margin:0; padding:0; overflow:hidden; font-family: sans-serif; -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
-    .controls { position: fixed; left: 8px; right: 8px; bottom: 8px; display:flex; gap:8px; justify-content:center; z-index:10; background: rgba(0,0,0,0.25); padding:6px; border-radius:8px; }
-    .controls button, .controls input, .controls span { font-size:14px; padding:6px 8px; color:#fff; background:transparent; border:1px solid rgba(255,255,255,0.15); border-radius:6px; }
-    .controls input[type="number"]{ background:#fff; color:#000; border:1px solid #ccc; padding:4px; }
-  </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.10/p5.min.js"></script>
-</head>
-<body>
-  <div class="controls" id="controls"></div>
-  <script src="sketch.js"></script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>ObjectCharacter</title>
+  </head>
+  <body>
+    <!-- load p5.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+
+    <!-- load the Character class (must come before sketch.js) -->
+    <script src="./Character.js"></script>
+
+    <!-- main sketch -->
+    <script src="./sketch.js"></script>
+  </body>
 </html>
