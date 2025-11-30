@@ -121,6 +121,9 @@ function preload() {
       err => { console.warn('loadImage error for', filename); }
     ));
   }
+
+  // --- plate asset load moved to plate.js ---
+  loadPlateAssets(); // make sure plate.js is already included in index.html
 }
 
 function setup() {
@@ -237,6 +240,9 @@ function setup() {
   // initialize speed baseline
   defaultBaseSpeed = player.baseSpeed || 140;
   lastSpeedInputTime = millis() / 1000;
+
+  // --- initialize plate (moved) ---
+  initPlate(walkFrames); // <-- NEW: set plate size & position
 }
 
 function windowResized() {
@@ -258,12 +264,24 @@ function windowResized() {
     const img = happyFrames[i];
     if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
   }
+
+  // reposition plate to bottom-center on resize (unless being dragged)
+  const plateMargin = 24;
+  electricPlate.resetX = Math.round(width * 0.5);
+  electricPlate.resetY = Math.round(height - plateMargin - electricPlate.h * 0.5);
+  if (!electricPlate.held) {
+    electricPlate.x = electricPlate.resetX;
+    electricPlate.y = electricPlate.resetY;
+  }
 }
 
 function draw() {
   background(30);
   const dt = deltaTime / 1000;
   const now = millis() / 1000;
+
+  // --- draw plate early (moved) ---
+  drawPlate(); // <-- NEW: draw plate from plate.js
 
   // set base speed depending on frustration hold state
   if (!isAngry && player) {
@@ -389,19 +407,35 @@ function increaseSpeedBoost() {
 }
 
 function mousePressed() {
-  // disable interaction while angry
+  // plate gets first dibs
+  if (plateMousePressed(mouseX, mouseY)) return false;
+
+  // original behavior: clicking player
   if (isAngry) return false;
   if (player && player.isPointInside(mouseX, mouseY)) {
     player.onClick();
     increaseSpeedBoost();
   }
   if (player) player.setLastInput();
+  return false;
 }
+
+function mouseDragged() {
+  if (plateMouseDragged(mouseX, mouseY)) return false;
+  return false;
+}
+
+function mouseReleased() {
+  if (plateMouseReleased()) return false;
+  return false;
+}
+
 function touchStarted() {
-  // disable interaction while angry
-  if (isAngry) return false;
   const tx = touches?.[0]?.x ?? mouseX;
   const ty = touches?.[0]?.y ?? mouseY;
+  if (plateTouchStarted(tx, ty)) return false;
+
+  if (isAngry) return false;
   if (player && player.isPointInside(tx, ty)) {
     player.onClick();
     increaseSpeedBoost();
@@ -409,50 +443,20 @@ function touchStarted() {
   if (player) player.setLastInput();
   return false;
 }
-function keyPressed() {
-  // ignore key input during angry period
-  if (isAngry) return;
-  if (player) player.setLastInput();
+
+function touchMoved() {
+  const tx = touches?.[0]?.x ?? mouseX;
+  const ty = touches?.[0]?.y ?? mouseY;
+  if (plateTouchMoved(tx, ty)) return false;
+  return true;
 }
 
-// cache for computed visible padding per image
-const visiblePaddingCache = new WeakMap();
+function touchEnded() {
+  if (plateTouchEnded()) return false;
+  return false;
+}
 
-function computeVisiblePadding(img) {
-  if (!img || !img.width || !img.height) return { visibleW: img ? img.width : 0, visibleH: img ? img.height : 0, leftPad: 0, rightPad: 0, topPad: 0, bottomPad: 0 };
-  if (visiblePaddingCache.has(img)) return visiblePaddingCache.get(img);
-
-  img.loadPixels();
-  const w = img.width, h = img.height;
-  let left = w, right = -1, top = h, bottom = -1;
-  const px = img.pixels;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const idx = 4 * (y * w + x);
-      const a = px[idx + 3];
-      if (a > 10) { // threshold for "visible" pixel
-        if (x < left) left = x;
-        if (x > right) right = x;
-        if (y < top) top = y;
-        if (y > bottom) bottom = y;
-      }
-    }
-  }
-
-  if (right < left) {
-    // fully transparent: fallback to full image size
-    const result = { leftPad: 0, rightPad: 0, topPad: 0, bottomPad: 0, visibleW: w, visibleH: h };
-    visiblePaddingCache.set(img, result);
-    return result;
-  }
-
-  const leftPad = left;
-  const rightPad = w - 1 - right;
-  const topPad = top;
-  const bottomPad = h - 1 - bottom;
-  const visibleW = right - left + 1;
-  const visibleH = bottom - top + 1;
-  const result = { leftPad, rightPad, topPad, bottomPad, visibleW, visibleH };
-  visiblePaddingCache.set(img, result);
-  return result;
+// helper: point in rect
+function _ptInRect(px, py, r) {
+  return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
 }
