@@ -76,6 +76,19 @@ const holdBoostFactor = 1.6;
 let happiness = 0;
 const happinessMax = 100;
 
+// NEW: happiness decay timer — decrease by 1 every 2 seconds
+const happinessTickInterval = 2.0; // seconds per -1
+let happinessTickTimer = 0.0;
+
+// NEW: happy playback controller (for one-loop happy animation)
+// const happyFps = 18;
+const happyFps = 36; // increased FPS to make happy animation play faster
+let happyPlayback = {
+  active: false,
+  animTime: 0,
+  duration: 0
+};
+
 function preload() {
   attemptedFiles = [];
   walkFrames = [];
@@ -116,10 +129,22 @@ function preload() {
   for (let i = 1; i <= requestedHappyCount; i++) {
     const filename = `${happyBasePath}/${happyPrefix}${nf(i, happyPad)}${happyExt}`;
     attemptedFiles.push(filename);
+    // load into array (preload blocks till images load)
     happyFrames.push(loadImage(filename,
-      img => {},
+      img => { /* loaded */ },
       err => { console.warn('loadImage error for', filename); }
     ));
+  }
+
+  // verify loaded happy frames and log counts (helps diagnose 0-frame issues)
+  let loadedHappyCount = 0;
+  for (let i = 0; i < happyFrames.length; i++) {
+    const img = happyFrames[i];
+    if (img && img.width && img.height) loadedHappyCount++;
+  }
+  console.log(`preload: attempted happy frames = ${happyFrames.length}, loaded = ${loadedHappyCount}`);
+  if (loadedHappyCount === 0) {
+    console.warn('No happy frames loaded from assets/happy. Verify files SparkHappy0001..SparkHappy0200 exist, the path is correct, and casing matches exactly.');
   }
 
   // --- plate asset load moved to plate.js ---
@@ -278,10 +303,62 @@ function windowResized() {
 function draw() {
   background(30);
   const dt = deltaTime / 1000;
-  const now = millis() / 1000;
+
+  // --- happiness decay: -1 every happinessTickInterval seconds ---
+  if (typeof happiness === 'number' && happiness > 0) {
+    happinessTickTimer += dt;
+    if (happinessTickTimer >= happinessTickInterval) {
+      happiness = Math.max(0, happiness - 1);
+      happinessTickTimer -= happinessTickInterval;
+      // guard: prevent multiple immediate decrements if timer is large
+      happinessTickTimer = Math.min(happinessTickTimer, happinessTickInterval * 1.5);
+    }
+  }
 
   // --- draw plate early (moved) ---
   drawPlate(); // <-- NEW: draw plate from plate.js
+
+  // If a one-loop happy playback is active, render the happy animation at the player's position
+  if (happyPlayback.active) {
+    const pd = happyFrames.length || 1;
+    // duration already computed when starting; fallback compute if needed
+    if (!happyPlayback.duration || happyPlayback.duration <= 0) {
+      happyPlayback.duration = pd / happyFps;
+    }
+    happyPlayback.animTime += dt;
+
+    // choose frame index for current animTime
+    const idx = floor((happyPlayback.animTime * happyFps) % pd);
+    const img = happyFrames[idx];
+    if (img) {
+      const iw = img.width || 100;
+      const ih = img.height || 100;
+      const maxH = height * 0.35;
+      const maxW = width * 0.5;
+      const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.2);
+      const w = iw * scaleFactor;
+      const h = ih * scaleFactor;
+      push();
+      imageMode(CENTER);
+      translate(player.x, player.y);
+      image(img, 0, 0, w, h);
+      pop();
+    }
+
+    // when the loop finishes, stop playback and resume normal behavior
+    if (happyPlayback.animTime >= happyPlayback.duration) {
+      happyPlayback.active = false;
+      happyPlayback.animTime = 0;
+      happyPlayback.duration = 0;
+      // ensure player returns to walk state after happy playback
+      if (player) {
+        player.state = 'walk';
+        player.animTime = 0;
+      }
+    }
+    // skip normal update/draw while playing happy one-loop
+    return;
+  }
 
   // set base speed depending on frustration hold state
   if (!isAngry && player) {
@@ -293,7 +370,7 @@ function draw() {
       player.baseSpeed = defaultBaseSpeed || 140;
     }
   }
-
+  
   // --- trigger angry mode when frustration reaches 100 ---
   if (!isAngry && player && player.frustration >= 100) {
     // save current speed state so it can be restored after angry finishes
@@ -459,4 +536,20 @@ function touchEnded() {
 // helper: point in rect
 function _ptInRect(px, py, r) {
   return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+}
+
+// NEW: start happy playback (one-loop happy animation)
+function startHappyPlayback() {
+  if (!happyFrames || happyFrames.length === 0) {
+    console.warn('startHappyPlayback: no happyFrames available');
+    return;
+  }
+  happyPlayback.active = true;
+  happyPlayback.animTime = 0;
+  happyPlayback.duration = happyFrames.length / happyFps; // one full loop
+  console.log('startHappyPlayback: started, duration', happyPlayback.duration);
+  if (player) {
+    player.state = 'happy';
+    player.animTime = 0;
+  }
 }

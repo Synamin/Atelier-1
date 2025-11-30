@@ -99,23 +99,39 @@ function drawPlate() {
     text('Plate (fallback)', electricPlate.x, electricPlate.y);
   }
 
-  // debug outline + coords (always visible)
-  noFill();
-  stroke(255, 0, 0);
-  strokeWeight(2);
-  ellipse(electricPlate.x, electricPlate.y, max(electricPlate.w, electricPlate.h) * 1.8);
-  noStroke();
-  fill(255);
-  textSize(12);
-  textAlign(LEFT, TOP);
-  text(`plate: ${floor(electricPlate.x)}, ${floor(electricPlate.y)} held:${electricPlate.held}`, 8, 8);
-
+  // debug outline (removed to avoid HUD overlap)
+  // (previous red debug ellipse removed)
   pop();
 }
 
 // helpers
 function _ptInRect(px, py, r) {
   return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+}
+
+function rectsOverlap(a, b) {
+  return !(a.x > b.x + b.w || a.x + a.w < b.x || a.y > b.y + b.h || a.y + a.h < b.y);
+}
+
+// New helper: robust player overlap test (distance-based, works even if player.spriteRect is missing)
+function _playerOverlap() {
+  if (typeof player === 'undefined' || player == null) return false;
+  const px = (typeof player.x === 'number') ? player.x : (player.pos && player.pos.x);
+  const py = (typeof player.y === 'number') ? player.y : (player.pos && player.pos.y);
+  if (typeof px !== 'number' || typeof py !== 'number') return false;
+
+  // estimate player visual size from walkFrames[0] (fallback to 64)
+  const refImg = (typeof walkFrames !== 'undefined' && walkFrames && walkFrames[0]) ? walkFrames[0] : null;
+  const playerSize = refImg ? Math.max(refImg.width || 0, refImg.height || 0) : 64;
+
+  // distance between plate center and player center
+  const dx = electricPlate.x - px;
+  const dy = electricPlate.y - py;
+  const d = Math.hypot(dx, dy);
+
+  // threshold: half plate + ~45% of player visual size (tweak if needed)
+  const threshold = (Math.max(electricPlate.w, electricPlate.h) * 0.5) + (playerSize * 0.45);
+  return d <= threshold;
 }
 
 // pointer handlers return true if they handled the event
@@ -125,6 +141,7 @@ function plateMousePressed(mx, my) {
     electricPlate.held = true;
     electricPlate.offsetX = mx - electricPlate.x;
     electricPlate.offsetY = my - electricPlate.y;
+    electricPlate.justFed = false; // allow feeding this drag
     if (typeof player !== 'undefined' && player) player.setLastInput?.();
     return true;
   }
@@ -135,6 +152,26 @@ function plateMouseDragged(mx, my) {
   if (electricPlate.held) {
     electricPlate.x = mx - electricPlate.offsetX;
     electricPlate.y = my - electricPlate.offsetY;
+
+    // robust overlap check using player's position (not spriteRect)
+    if (!electricPlate.justFed && _playerOverlap()) {
+      console.log('plate fed (drag) — overlap detected');
+      if (typeof happiness === 'number') {
+        const cap = (typeof happinessMax === 'number') ? happinessMax : 100;
+        happiness = Math.min(cap, happiness + 15);
+      }
+      // reset plate and mark fed
+      electricPlate.x = electricPlate.resetX;
+      electricPlate.y = electricPlate.resetY;
+      electricPlate.held = false;
+      electricPlate.justFed = true;
+      if (typeof startHappyPlayback === 'function') {
+        console.log('plate: calling startHappyPlayback()');
+        startHappyPlayback();
+      }
+      return true;
+    }
+
     return true;
   }
   return false;
@@ -142,6 +179,26 @@ function plateMouseDragged(mx, my) {
 
 function plateMouseReleased() {
   if (electricPlate.held) {
+    // first try robust overlap test
+    const overlapped = _playerOverlap();
+
+    if (overlapped) {
+      console.log('plate fed (release) — overlap detected');
+      if (typeof happiness === 'number') {
+        const cap = (typeof happinessMax === 'number') ? happinessMax : 100;
+        happiness = Math.min(cap, happiness + 15);
+      }
+      electricPlate.x = electricPlate.resetX;
+      electricPlate.y = electricPlate.resetY;
+      electricPlate.held = false;
+      electricPlate.justFed = true;
+      if (typeof startHappyPlayback === 'function') {
+        console.log('plate: calling startHappyPlayback()');
+        startHappyPlayback();
+      }
+      return true;
+    }
+
     electricPlate.held = false;
     return true;
   }
