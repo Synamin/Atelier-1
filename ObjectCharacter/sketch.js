@@ -72,6 +72,10 @@ let savedPlayerBaseSpeed = null;
 // NEW: factor to use when frustration >= threshold (keeps character moving fast)
 const holdBoostFactor = 1.6;
 
+// NEW: happiness meter (starts at 0)
+let happiness = 0;
+const happinessMax = 100;
+
 function preload() {
   attemptedFiles = [];
   walkFrames = [];
@@ -370,6 +374,23 @@ function draw() {
   text(`state: ${player.state}`, 8, 8);
   text(`frames (walk): ${walkFrames.length}  idx: ${player.frameIndex}`, 8, 24);
   text(`frustration: ${floor(player.frustration)}`, 8, 40);
+
+  // happiness meter: placed directly under the frustration line
+  const hudTextSize = 12;
+  const hx = 8;
+  const hw = 140;
+  const hh = 12;
+  const frustrationY = 40; // same y used for frustration text
+  // hy computed so the meter sits directly beneath the frustration line
+  const hy = frustrationY + hudTextSize + 2;
+  const hpct = constrain(happiness / happinessMax, 0, 1);
+  noStroke();
+  fill(50, 200, 120);
+  rect(hx, hy, hw * hpct, hh, 4);
+  fill(255);
+  textSize(hudTextSize);
+  textAlign(LEFT, TOP);
+  text(`happiness: ${floor(happiness)}`, hx + hw + 8, hy);
   pop();
 }
 
