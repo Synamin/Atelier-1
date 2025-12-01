@@ -17,9 +17,10 @@ class Character {
     this.state = 'walk'; // 'walk'|'sleep'
     // overall multiplier to make the sprite a bit bigger
     this.displayScale = 1.30; // change this value to make sprite larger/smaller
-    this.dirAngle = random(TWO_PI);
+    // replace p5 random/TWO_PI with Math equivalents to satisfy linters
+    this.dirAngle = Math.random() * Math.PI * 2;
     this.turnTimer = 0;
-    this.changeInterval = random(0.6, 2.2);
+    this.changeInterval = 0.6 + Math.random() * (2.2 - 0.6);
     this.baseSpeed = 140;
     this.speedMultiplier = 1;
     this.maxSpeed = 800;
@@ -43,6 +44,9 @@ class Character {
     this.happyFps = 36;
     this.playHappyOnceFlag = false;
     this.happyDuration = 0;
+
+    // follow-target used by ball module
+    this.followTarget = { active: false, x: 0, y: 0, tolerance: 12, speed: null };
   }
 
   setLastInput() {
@@ -58,7 +62,7 @@ class Character {
     this.isPressed = true;
     this.speedMultiplier = 2.2;
     this.pressTimeout = 0.7;
-    this.frustration = min(100, this.frustration + this.frustrationIncrease);
+    this.frustration = Math.min(100, this.frustration + this.frustrationIncrease);
     if (this.state === 'sleep') {
       this.state = 'walk';
     }
@@ -104,14 +108,17 @@ class Character {
 
       // ensure spriteRect remains valid while happy is playing so UI/overlays continue to align
       // use current happy frame size if available, otherwise fallback to walk frame sizing
-      const img = (this.happyFrames && this.happyFrames.length>0) ? this.happyFrames[floor((this.happyAnimTime*this.happyFps) % this.happyFrames.length)] : (this.walkFrames[this.frameIndex] || this.walkFrames[0]);
+      const hfLen = (this.happyFrames && this.happyFrames.length) ? this.happyFrames.length : 0;
+      const img = hfLen > 0
+        ? this.happyFrames[Math.floor((this.happyAnimTime * this.happyFps) % hfLen)]
+        : (this.walkFrames[this.frameIndex] || this.walkFrames[0]);
       const iw = (img && img.width) || 100;
       const ih = (img && img.height) || 100;
       const maxH = height * 0.35;
       const maxW = width * 0.5;
       const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.2);
-      const w = iw * scaleFactor;
-      const h = ih * scaleFactor;
+      const w = iw * scaleFactor * this.displayScale;
+      const h = ih * scaleFactor * this.displayScale;
       this.spriteRect.x = this.x - w/2;
       this.spriteRect.y = this.y - h/2;
       this.spriteRect.w = w;
@@ -136,7 +143,7 @@ class Character {
     if (!this.isPressed && this.frustration > 0) {
       this.frustrationTickTimer += dt;
       while (this.frustrationTickTimer >= this.frustrationTickInterval && this.frustration > 0) {
-        this.frustration = max(0, this.frustration - 1);
+        this.frustration = Math.max(0, this.frustration - 1);
         this.frustrationTickTimer -= this.frustrationTickInterval;
       }
     }
@@ -146,25 +153,72 @@ class Character {
       const animFps = 8;
       this.animTime += dt;
       const total = this.sleepFrames.length || 1;
-      this.frameIndex = floor((this.animTime * animFps) % total);
+      this.frameIndex = Math.floor((this.animTime * animFps) % total);
       return;
+    }
+
+    // follow-target movement overrides wandering
+    if (this.followTarget && this.followTarget.active) {
+      const tx = this.followTarget.x;
+      const ty = this.followTarget.y;
+      const dx = tx - this.x;
+      const dy = ty - this.y;
+      const dist = Math.hypot(dx, dy);
+      // stop if within tolerance
+      const tol = (typeof this.followTarget.tolerance === 'number') ? this.followTarget.tolerance : 12;
+      if (dist <= tol) {
+        this.followTarget.active = false;
+        this.vx = 0; this.vy = 0;
+      } else {
+        // steer toward target smoothly
+        const angle = Math.atan2(dy, dx);
+        const targetSpeed = (this.followTarget.speed || (this.baseSpeed * 1.0)) * this.speedMultiplier;
+        const targetVx = Math.cos(angle) * targetSpeed;
+        const targetVy = Math.sin(angle) * targetSpeed;
+        const t = 1 - Math.exp(-this.smoothness * dt);
+        this.vx += (targetVx - this.vx) * t;
+        this.vy += (targetVy - this.vy) * t;
+        // integrate
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        // update animation/time so sprite animates while moving
+        const moving = Math.hypot(this.vx, this.vy) > 6;
+        const curFps = this.isPressed ? this.pressedFps : this.fps;
+        this.animTime += dt * (moving ? 1 : 0.4);
+        const total = this.walkFrames.length || 1;
+        this.frameIndex = Math.floor((this.animTime * curFps) % total);
+        // update sprite rect to match new position
+        const img = this.walkFrames[this.frameIndex] || this.walkFrames[0];
+        const iw = (img && img.width) || 100;
+        const ih = (img && img.height) || 100;
+        const maxH = height * 0.35;
+        const maxW = width * 0.5;
+        const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.35);
+        const w = iw * scaleFactor * this.displayScale;
+        const h = ih * scaleFactor * this.displayScale;
+        this.spriteRect.x = this.x - w/2;
+        this.spriteRect.y = this.y - h/2;
+        this.spriteRect.w = w;
+        this.spriteRect.h = h;
+        return;
+      }
     }
 
     // wandering
     this.turnTimer += dt;
     if (this.turnTimer >= this.changeInterval) {
       this.turnTimer = 0;
-      this.changeInterval = random(0.8, 2.5);
-      if (random() < 0.14) this.dirAngle = random(TWO_PI);
-      else this.dirAngle += random(-PI/3, PI/3);
+      this.changeInterval = 0.8 + Math.random() * (2.5 - 0.8);
+      if (Math.random() < 0.14) this.dirAngle = Math.random() * Math.PI * 2;
+      else this.dirAngle += (Math.random() * (2 * Math.PI / 3) - Math.PI / 3);
     }
 
     const targetSpeed = this.baseSpeed * this.speedMultiplier;
-    const targetVx = cos(this.dirAngle) * targetSpeed;
-    const targetVy = sin(this.dirAngle) * targetSpeed;
+    const targetVx = Math.cos(this.dirAngle) * targetSpeed;
+    const targetVy = Math.sin(this.dirAngle) * targetSpeed;
     const t = 1 - Math.exp(-this.smoothness * dt);
-    this.vx = lerp(this.vx, targetVx, t);
-    this.vy = lerp(this.vy, targetVy, t);
+    this.vx += (targetVx - this.vx) * t;
+    this.vy += (targetVy - this.vy) * t;
 
     // clamp
     const sp = Math.hypot(this.vx, this.vy);
@@ -190,8 +244,8 @@ class Character {
     const halfH = h * 0.5;
 
     // clamp to screen so visible sprite touches edges
-    if (this.x < halfW) { this.x = halfW; this.vx = Math.abs(this.vx) * 0.6; this.dirAngle = PI - this.dirAngle; }
-    if (this.x > width - halfW) { this.x = width - halfW; this.vx = -Math.abs(this.vx) * 0.6; this.dirAngle = PI - this.dirAngle; }
+    if (this.x < halfW) { this.x = halfW; this.vx = Math.abs(this.vx) * 0.6; this.dirAngle = Math.PI - this.dirAngle; }
+    if (this.x > width - halfW) { this.x = width - halfW; this.vx = -Math.abs(this.vx) * 0.6; this.dirAngle = Math.PI - this.dirAngle; }
     if (this.y < halfH) { this.y = halfH; this.vy = Math.abs(this.vy) * 0.6; this.dirAngle = -this.dirAngle; }
     if (this.y > height - halfH) { this.y = height - halfH; this.vy = -Math.abs(this.vy) * 0.6; this.dirAngle = -this.dirAngle; }
 
@@ -206,7 +260,7 @@ class Character {
     const curFps = this.isPressed ? this.pressedFps : this.fps;
     this.animTime += dt * (moving ? 1 : 0.4);
     const total = this.walkFrames.length || 1;
-    this.frameIndex = floor((this.animTime * curFps) % total);
+    this.frameIndex = Math.floor((this.animTime * curFps) % total);
 
     // update sprite rect for input tests
     this.spriteRect.x = this.x - w/2;
@@ -218,7 +272,7 @@ class Character {
   draw() {
     // If happy state, draw happy frame instead of normal drawing
     if (this.state === 'happy' && this.happyFrames && this.happyFrames.length > 0) {
-      const idx = floor((this.happyAnimTime * this.happyFps) % this.happyFrames.length);
+      const idx = Math.floor((this.happyAnimTime * this.happyFps) % this.happyFrames.length);
       const img = this.happyFrames[idx];
       if (img) {
         // match size/placement consistent with other states (use spriteRect if available)

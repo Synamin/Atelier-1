@@ -149,6 +149,9 @@ function preload() {
 
   // --- plate asset load moved to plate.js ---
   loadPlateAssets(); // make sure plate.js is already included in index.html
+
+  // ball assets
+  loadBallAssets();
 }
 
 function setup() {
@@ -261,13 +264,14 @@ function setup() {
   }
 
   player = new Character(width/2, height/2, walkFrames, sleepFrames);
+  // pass happy frames into the Character so it can play them
+  player.setHappyFrames(happyFrames, happyFps);
 
-  // initialize speed baseline
-  defaultBaseSpeed = player.baseSpeed || 140;
-  lastSpeedInputTime = millis() / 1000;
+  // initialize plate (sizes & places it bottom-right)
+  if (typeof initPlate === 'function') initPlate(walkFrames);
 
-  // --- initialize plate (moved) ---
-  initPlate(walkFrames); // <-- NEW: set plate size & position
+  // init ball after canvas created & frames available
+  initBall();
 }
 
 function windowResized() {
@@ -290,19 +294,28 @@ function windowResized() {
     if (img.width > desiredMax || img.height > desiredMax) img.resize(0, desiredMax);
   }
 
-  // reposition plate to bottom-center on resize (unless being dragged)
-  const plateMargin = 24;
-  electricPlate.resetX = Math.round(width * 0.5);
-  electricPlate.resetY = Math.round(height - plateMargin - electricPlate.h * 0.5);
-  if (!electricPlate.held) {
-    electricPlate.x = electricPlate.resetX;
-    electricPlate.y = electricPlate.resetY;
+  // reposition plate to bottom-right on resize (use plate.init logic if available)
+  if (typeof initPlate === 'function') {
+    initPlate(walkFrames); // recompute plate.w/h and resetX/resetY for bottom-right
+  } else {
+    const plateMargin = 24;
+    electricPlate.resetX = Math.round(width - plateMargin - electricPlate.w * 0.5);
+    electricPlate.resetY = Math.round(height - plateMargin - electricPlate.h * 0.5);
+    if (!electricPlate.held) {
+      electricPlate.x = electricPlate.resetX;
+      electricPlate.y = electricPlate.resetY;
+    }
   }
 }
 
 function draw() {
   background(30);
   const dt = deltaTime / 1000;
+  const now = millis() / 1000;
+
+  // draw plate/ball early so they are visible
+  if (typeof drawPlate === 'function') drawPlate();
+  if (typeof drawBall === 'function') drawBall();
 
   // --- happiness decay: -1 every happinessTickInterval seconds ---
   if (typeof happiness === 'number' && happiness > 0) {
@@ -314,9 +327,6 @@ function draw() {
       happinessTickTimer = Math.min(happinessTickTimer, happinessTickInterval * 1.5);
     }
   }
-
-  // --- draw plate early (moved) ---
-  drawPlate(); // <-- NEW: draw plate from plate.js
 
   // If a one-loop happy playback is active, render the happy animation at the player's position
   if (happyPlayback.active) {
@@ -484,8 +494,13 @@ function increaseSpeedBoost() {
 }
 
 function mousePressed() {
-  // plate gets first dibs
-  if (plateMousePressed(mouseX, mouseY)) return false;
+  // if clicked the ball, arm it (ball handles this)
+  if (typeof ballMousePressed === 'function' && ballMousePressed(mouseX, mouseY)) return false;
+  // if ball is armed, the global click consumes and sets the player's target
+  if (typeof ballHandleGlobalClick === 'function' && ballHandleGlobalClick(mouseX, mouseY)) return false;
+
+  // existing plate handling (if you also use plate)
+  if (typeof plateMousePressed === 'function' && plateMousePressed(mouseX, mouseY)) return false;
 
   // original behavior: clicking player
   if (isAngry) return false;
@@ -510,7 +525,9 @@ function mouseReleased() {
 function touchStarted() {
   const tx = touches?.[0]?.x ?? mouseX;
   const ty = touches?.[0]?.y ?? mouseY;
-  if (plateTouchStarted(tx, ty)) return false;
+  if (typeof ballMousePressed === 'function' && ballMousePressed(tx, ty)) return false;
+  if (typeof ballHandleGlobalClick === 'function' && ballHandleGlobalClick(tx, ty)) return false;
+  if (typeof plateTouchStarted === 'function' && plateTouchStarted(tx, ty)) return false;
 
   if (isAngry) return false;
   if (player && player.isPointInside(tx, ty)) {

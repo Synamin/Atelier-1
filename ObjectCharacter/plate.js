@@ -57,12 +57,16 @@ function loadPlateAssets() {
 function initPlate(walkFramesLocal) {
   const refW = (walkFramesLocal && walkFramesLocal[0] && walkFramesLocal[0].width) ? walkFramesLocal[0].width : 96;
   const refH = (walkFramesLocal && walkFramesLocal[0] && walkFramesLocal[0].height) ? walkFramesLocal[0].height : 48;
-  electricPlate.w = max(32, Math.round(refW * 0.45));
-  electricPlate.h = max(24, Math.round(refH * 0.45));
+  // make the plate a bit bigger than before (larger multiplier and higher minimum)
+  electricPlate.w = Math.max(48, Math.round(refW * 0.65));
+  electricPlate.h = Math.max(36, Math.round(refH * 0.65));
 
-  const plateMargin = 24;
-  electricPlate.resetX = Math.round(width * 0.5);
-  electricPlate.resetY = Math.round(height - plateMargin - electricPlate.h * 0.5);
+  // place plate near bottom-right with a larger margin and slight upward offset
+  const plateMargin = 32; // distance from right/bottom edges
+  const bottomOffset = 12; // extra lift above bottom edge
+  electricPlate.resetX = Math.round(width - plateMargin - electricPlate.w * 0.5);
+  electricPlate.resetY = Math.round(height - plateMargin - electricPlate.h * 0.5 - bottomOffset);
+  // set initial position to the reset position
   electricPlate.x = electricPlate.resetX;
   electricPlate.y = electricPlate.resetY;
   electricPlate.held = false;
@@ -142,7 +146,9 @@ function plateMousePressed(mx, my) {
     electricPlate.offsetX = mx - electricPlate.x;
     electricPlate.offsetY = my - electricPlate.y;
     electricPlate.justFed = false; // allow feeding this drag
-    if (typeof player !== 'undefined' && player) player.setLastInput?.();
+    if (typeof player !== 'undefined' && player && typeof player.setLastInput === 'function') {
+      player.setLastInput();
+    }
     return true;
   }
   return false;
@@ -214,4 +220,16 @@ function plateTouchMoved(tx, ty) {
 }
 function plateTouchEnded() {
   return plateMouseReleased();
+}
+
+function windowResized() {
+  // ...existing resize logic...
+  // reposition plate to bottom-right on resize (unless being dragged)
+  const plateMargin = 24;
+  electricPlate.resetX = Math.round(width - plateMargin - electricPlate.w * 0.5);
+  electricPlate.resetY = Math.round(height - plateMargin - electricPlate.h * 0.5);
+  if (!electricPlate.held) {
+    electricPlate.x = electricPlate.resetX;
+    electricPlate.y = electricPlate.resetY;
+  }
 }
