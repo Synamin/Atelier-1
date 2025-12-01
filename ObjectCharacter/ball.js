@@ -39,6 +39,7 @@ function initBall() {
   electricBall.armed = false;
   electricBall.held = false;
   electricBall.visible = true;
+  electricBall.justTouched = false; // avoid repeated happiness increments while staying in contact
 }
 
 function drawBall() {
@@ -114,6 +115,28 @@ function ballMouseDragged(mx, my) {
     player.followTarget.x = electricBall.x;
     player.followTarget.y = electricBall.y;
   }
+
+  // if player is close enough to the ball while chasing, increase happiness once per contact
+  if (typeof player !== 'undefined' && player && !electricBall.justTouched) {
+    const px = (typeof player.x === 'number') ? player.x : (player.pos && player.pos.x);
+    const py = (typeof player.y === 'number') ? player.y : (player.pos && player.pos.y);
+    if (typeof px === 'number' && typeof py === 'number') {
+      const dx = electricBall.x - px;
+      const dy = electricBall.y - py;
+      const dist = Math.hypot(dx, dy);
+      // threshold: half ball + half player sprite (fallback sizes)
+      const prw = (player.spriteRect && player.spriteRect.w) ? player.spriteRect.w : (player.walkFrames && player.walkFrames[0] && player.walkFrames[0].width) || 64;
+      const threshold = (Math.max(electricBall.w, electricBall.h) * 0.5) + (prw * 0.5) * 0.6;
+      if (dist <= threshold) {
+        electricBall.justTouched = true;
+        if (typeof happiness === 'number') {
+          happiness = Math.min((typeof happinessMax === 'number' ? happinessMax : 100), happiness + 10);
+        }
+        console.log('ball: player touched ball -> happiness += 10 (now)', happiness);
+      }
+    }
+  }
+
   return true;
 }
 
@@ -124,6 +147,8 @@ function ballMouseReleased() {
   if (typeof player !== 'undefined' && player && player.followTarget) {
     player.followTarget.active = false;
   }
+  // allow future contacts to re-increment happiness again
+  electricBall.justTouched = false;
   console.log('ball: released -> player stops chasing');
   return true;
 }
