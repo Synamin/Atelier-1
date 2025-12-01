@@ -513,12 +513,14 @@ function mousePressed() {
 }
 
 function mouseDragged() {
-  if (plateMouseDragged(mouseX, mouseY)) return false;
+  if (typeof ballMouseDragged === 'function' && ballMouseDragged(mouseX, mouseY)) return false;
+  if (typeof plateMouseDragged === 'function' && plateMouseDragged(mouseX, mouseY)) return false;
   return false;
 }
 
 function mouseReleased() {
-  if (plateMouseReleased()) return false;
+  if (typeof ballMouseReleased === 'function' && ballMouseReleased()) return false;
+  if (typeof plateMouseReleased === 'function' && plateMouseReleased()) return false;
   return false;
 }
 
@@ -541,11 +543,13 @@ function touchStarted() {
 function touchMoved() {
   const tx = touches?.[0]?.x ?? mouseX;
   const ty = touches?.[0]?.y ?? mouseY;
+  if (typeof ballTouchMoved === 'function' && ballTouchMoved(tx, ty)) return false;
   if (plateTouchMoved(tx, ty)) return false;
   return true;
 }
 
 function touchEnded() {
+  if (typeof ballTouchEnded === 'function' && ballTouchEnded()) return false;
   if (plateTouchEnded()) return false;
   return false;
 }
