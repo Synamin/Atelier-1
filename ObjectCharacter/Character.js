@@ -15,6 +15,8 @@ class Character {
     this.walkFrames = walkFrames;
     this.sleepFrames = sleepFrames;
     this.state = 'walk'; // 'walk'|'sleep'
+    // overall multiplier to make the sprite a bit bigger
+    this.displayScale = 1.30; // change this value to make sprite larger/smaller
     this.dirAngle = random(TWO_PI);
     this.turnTimer = 0;
     this.changeInterval = random(0.6, 2.2);
@@ -35,6 +37,12 @@ class Character {
     this.spriteRect = { x:0, y:0, w:0, h:0 };
     this.lastInputTime = millis() / 1000;
     this.sleepAfterSeconds = 30;
+    // happy animation support
+    this.happyFrames = [];
+    this.happyAnimTime = 0;
+    this.happyFps = 36;
+    this.playHappyOnceFlag = false;
+    this.happyDuration = 0;
   }
 
   setLastInput() {
@@ -61,7 +69,58 @@ class Character {
            py >= this.spriteRect.y && py <= this.spriteRect.y + this.spriteRect.h;
   }
 
+  // allow external code to provide happy frames and optionally fps
+  setHappyFrames(frames = [], fps = 36) {
+    this.happyFrames = frames || [];
+    this.happyFps = fps || 36;
+    this.happyDuration = (this.happyFrames.length > 0) ? (this.happyFrames.length / this.happyFps) : 0;
+  }
+
+  // start a single loop happy playback that temporarily replaces the character animation
+  playHappyOnce() {
+    if (!this.happyFrames || this.happyFrames.length === 0) return;
+    this.state = 'happy';
+    this.happyAnimTime = 0;
+    this.happyDuration = this.happyFrames.length / this.happyFps;
+    this.playHappyOnceFlag = true;
+    // stop movement while showing happy (matches how sleep/angry replace behavior)
+    this.vx = 0;
+    this.vy = 0;
+    this.isPressed = false;
+  }
+
   update(dt) {
+    // If in happy state: advance happy timer and when finished, return to walk.
+    // Also update spriteRect so the character keeps its on-screen size/position
+    if (this.state === 'happy') {
+      this.happyAnimTime += dt;
+      if (this.playHappyOnceFlag && this.happyAnimTime >= this.happyDuration) {
+        // one loop complete -> return to normal walk
+        this.playHappyOnceFlag = false;
+        this.happyAnimTime = 0;
+        this.state = 'walk';
+        this.animTime = 0;
+      }
+
+      // ensure spriteRect remains valid while happy is playing so UI/overlays continue to align
+      // use current happy frame size if available, otherwise fallback to walk frame sizing
+      const img = (this.happyFrames && this.happyFrames.length>0) ? this.happyFrames[floor((this.happyAnimTime*this.happyFps) % this.happyFrames.length)] : (this.walkFrames[this.frameIndex] || this.walkFrames[0]);
+      const iw = (img && img.width) || 100;
+      const ih = (img && img.height) || 100;
+      const maxH = height * 0.35;
+      const maxW = width * 0.5;
+      const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.2);
+      const w = iw * scaleFactor;
+      const h = ih * scaleFactor;
+      this.spriteRect.x = this.x - w/2;
+      this.spriteRect.y = this.y - h/2;
+      this.spriteRect.w = w;
+      this.spriteRect.h = h;
+
+      // do NOT stop the rest of the sketch from drawing — update returns so only character movement is paused
+      return;
+    }
+
     // record last input -> handle sleep
     const now = millis() / 1000;
     if (now - this.lastInputTime >= this.sleepAfterSeconds) {
@@ -124,9 +183,9 @@ class Character {
     const ih = (img && img.height) || 100;
     const maxH = height * 0.35;
     const maxW = width * 0.5;
-    const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.2);
-    const w = iw * scaleFactor;
-    const h = ih * scaleFactor;
+    const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.35);
+    const w = iw * scaleFactor * this.displayScale;
+    const h = ih * scaleFactor * this.displayScale;
     const halfW = w * 0.5;
     const halfH = h * 0.5;
 
@@ -157,6 +216,36 @@ class Character {
   }
 
   draw() {
+    // If happy state, draw happy frame instead of normal drawing
+    if (this.state === 'happy' && this.happyFrames && this.happyFrames.length > 0) {
+      const idx = floor((this.happyAnimTime * this.happyFps) % this.happyFrames.length);
+      const img = this.happyFrames[idx];
+      if (img) {
+        // match size/placement consistent with other states (use spriteRect if available)
+        let w = img.width || 100;
+        let h = img.height || 100;
+        if (this.spriteRect && typeof this.spriteRect.w === 'number' && typeof this.spriteRect.h === 'number') {
+          w = this.spriteRect.w;
+          h = this.spriteRect.h;
+        } else {
+          // fallback scaling logic similar to other animation draws
+          const iw = img.width || 100;
+          const ih = img.height || 100;
+          const maxH = height * 0.35;
+          const maxW = width * 0.5;
+          const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.35);
+          w = iw * scaleFactor * this.displayScale;
+          h = ih * scaleFactor * this.displayScale;
+        }
+        push();
+        imageMode(CENTER);
+        translate(this.x, this.y);
+        image(img, 0, 0, w, h);
+        pop();
+      }
+      return;
+    }
+
     if (this.state === 'sleep') {
       const img = this.sleepFrames[this.frameIndex] || this.sleepFrames[0];
       if (img) image(img, this.x, this.y, this.spriteRect.w || img.width, this.spriteRect.h || img.height);
@@ -169,9 +258,9 @@ class Character {
     const ih = img.height || 100;
     const maxH = height * 0.35;
     const maxW = width * 0.5;
-    const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.2);
-    const w = iw * scaleFactor;
-    const h = ih * scaleFactor;
+    const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.35);
+    const w = iw * scaleFactor * this.displayScale;
+    const h = ih * scaleFactor * this.displayScale;
     push();
     image(img, this.x, this.y, w, h);
     pop();
