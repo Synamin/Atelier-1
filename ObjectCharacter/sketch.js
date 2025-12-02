@@ -328,47 +328,18 @@ function draw() {
     }
   }
 
-  // If a one-loop happy playback is active, render the happy animation at the player's position
-  if (happyPlayback.active) {
-    const pd = happyFrames.length || 1;
-    // duration already computed when starting; fallback compute if needed
-    if (!happyPlayback.duration || happyPlayback.duration <= 0) {
-      happyPlayback.duration = pd / happyFps;
-    }
-    happyPlayback.animTime += dt;
-
-    // choose frame index for current animTime
-    const idx = floor((happyPlayback.animTime * happyFps) % pd);
-    const img = happyFrames[idx];
-    if (img) {
-      const iw = img.width || 100;
-      const ih = img.height || 100;
-      const maxH = height * 0.35;
-      const maxW = width * 0.5;
-      const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.2);
-      const w = iw * scaleFactor;
-      const h = ih * scaleFactor;
-      push();
-      imageMode(CENTER);
-      translate(player.x, player.y);
-      image(img, 0, 0, w, h);
-      pop();
-    }
-
-    // when the loop finishes, stop playback and resume normal behavior
-    if (happyPlayback.animTime >= happyPlayback.duration) {
-      happyPlayback.active = false;
-      happyPlayback.animTime = 0;
-      happyPlayback.duration = 0;
-      // ensure player returns to walk state after happy playback
-      if (player) {
-        player.state = 'walk';
-        player.animTime = 0;
-      }
-    }
-    // skip normal update/draw while playing happy one-loop
-    return;
+  // trigger celebration when happiness reaches max (runs inside the draw loop)
+  if (typeof happiness === 'number' && happiness >= happinessMax && player && !player.celebrating) {
+    player.startCelebrate(2.2, 120, 2); // duration, peak px, rotations
+    console.log('happiness max reached -> starting celebration');
+    // prevent immediate retrigger
+    happiness = 0;
   }
+
+  // NOTE: Removed separate global happyPlayback drawing so Character.draw()
+  // will handle happy state rendering using player.spriteRect (keeps size consistent).
+  // Character.draw() will render the happy frames when player.state === 'happy'.
+  // (No code here.)
 
   // set base speed depending on frustration hold state
   if (!isAngry && player) {

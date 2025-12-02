@@ -17,6 +17,15 @@ class Character {
     this.state = 'walk'; // 'walk'|'sleep'
     // overall multiplier to make the sprite a bit bigger
     this.displayScale = 1.30; // change this value to make sprite larger/smaller
+    // celebration / rotation state
+    this.rotationAngle = 0;           // current rotation applied when drawing
+    this.celebrating = false;         // true while celebration animation runs
+    this._celebrateTime = 0;
+    this._celebrateDuration = 0;
+    this._celebrateStartX = 0;
+    this._celebrateStartY = 0;
+    this._celebratePeak = 0;
+    this._celebrateRotations = 0;
     // replace p5 random/TWO_PI with Math equivalents to satisfy linters
     this.dirAngle = Math.random() * Math.PI * 2;
     this.turnTimer = 0;
@@ -93,7 +102,69 @@ class Character {
     this.isPressed = false;
   }
 
+  // start a celebratory jump+spin that returns to original position/rotation
+  startCelebrate(duration = 2.2, peak = 120, rotations = 2) {
+    if (this.celebrating) return;
+    this.celebrating = true;
+    this._celebrateTime = 0;
+    this._celebrateDuration = duration;
+    this._celebrateStartX = this.x;
+    this._celebrateStartY = this.y;
+    this._celebratePeak = peak;
+    this._celebrateRotations = rotations;
+    // ensure other movement stops
+    this.vx = 0; this.vy = 0;
+    // lock state (optional)
+    this.state = 'happy';
+  }
+
   update(dt) {
+    // celebration animation overrides other movement/AI while active
+    if (this.celebrating) {
+      this._celebrateTime += dt;
+      const t = Math.min(1, this._celebrateTime / this._celebrateDuration);
+      // vertical offset: up then down using sin(pi * t) so it returns to 0 at end
+      const offsetY = -this._celebratePeak * Math.sin(Math.PI * t);
+      this.y = this._celebrateStartY + offsetY;
+      // rotation: clockwise full rotations (positive angle)
+      this.rotationAngle = (2 * Math.PI) * this._celebrateRotations * t;
+      // keep spriteRect aligned while celebrating (use current frame size)
+      const img = (this.walkFrames && this.walkFrames[this.frameIndex]) ? this.walkFrames[this.frameIndex] : null;
+      const iw = (img && img.width) || 100;
+      const ih = (img && img.height) || 100;
+      const maxH = height * 0.35;
+      const maxW = width * 0.5;
+      const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.35);
+      const w = iw * scaleFactor * this.displayScale;
+      const h = ih * scaleFactor * this.displayScale;
+      this.spriteRect.x = this.x - w/2;
+      this.spriteRect.y = this.y - h/2;
+      this.spriteRect.w = w;
+      this.spriteRect.h = h;
+      // finish celebration
+      if (this._celebrateTime >= this._celebrateDuration) {
+        this.celebrating = false;
+        this._celebrateTime = 0;
+        this.rotationAngle = 0;
+        // ensure exact landing at original position
+        this.x = this._celebrateStartX;
+        this.y = this._celebrateStartY;
+        // recompute spriteRect final
+        this.spriteRect.x = this.x - w/2;
+        this.spriteRect.y = this.y - h/2;
+        this.spriteRect.w = w;
+        this.spriteRect.h = h;
+        // STOP happy playback when celebration ends so animation returns to idle
+        this.state = 'walk';
+        this.animTime = 0;
+        this.happyAnimTime = 0;
+        this.playHappyOnceFlag = false;
+        this.happyDuration = 0;
+      }
+      // skip normal movement while celebrating
+      return;
+    }
+
     // If in happy state: advance happy timer and when finished, return to walk.
     // Also update spriteRect so the character keeps its on-screen size/position
     if (this.state === 'happy') {
@@ -270,58 +341,35 @@ class Character {
   }
 
   draw() {
-    // If happy state, draw happy frame instead of normal drawing
+    // If happy state, draw happy frame using the character's spriteRect size/position
     if (this.state === 'happy' && this.happyFrames && this.happyFrames.length > 0) {
       const idx = Math.floor((this.happyAnimTime * this.happyFps) % this.happyFrames.length);
       const img = this.happyFrames[idx];
       if (img) {
-        // match size/placement consistent with other states (use spriteRect if available)
-        let w = img.width || 100;
-        let h = img.height || 100;
-        if (this.spriteRect && typeof this.spriteRect.w === 'number' && typeof this.spriteRect.h === 'number') {
-          w = this.spriteRect.w;
-          h = this.spriteRect.h;
-        } else {
-          // fallback scaling logic similar to other animation draws
-          const iw = img.width || 100;
-          const ih = img.height || 100;
-          const maxH = height * 0.35;
-          const maxW = width * 0.5;
-          const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.35);
-          w = iw * scaleFactor * this.displayScale;
-          h = ih * scaleFactor * this.displayScale;
-        }
-        push();
         imageMode(CENTER);
+        push();
         translate(this.x, this.y);
-        image(img, 0, 0, w, h);
+        rotate(this.rotationAngle);
+        image(img, 0, 0, img.width * this.displayScale, img.height * this.displayScale);
         pop();
+        return;
       }
-      return;
     }
 
-    if (this.state === 'sleep') {
-      const img = this.sleepFrames[this.frameIndex] || this.sleepFrames[0];
-      if (img) image(img, this.x, this.y, this.spriteRect.w || img.width, this.spriteRect.h || img.height);
-      return;
+    // rotation/scale for celebration state
+    const rot = (this.celebrating && this.rotationAngle !== 0) ? this.rotationAngle : 0;
+    const scl = this.displayScale;
+    const img = (this.state === 'sleep' && this.sleepFrames.length > 0)
+      ? this.sleepFrames[this.frameIndex]
+      : this.walkFrames[this.frameIndex];
+
+    if (img) {
+      imageMode(CENTER);
+      push();
+      translate(this.x, this.y);
+      rotate(rot);
+      image(img, 0, 0, img.width * scl, img.height * scl);
+      pop();
     }
-    const img = this.walkFrames[this.frameIndex] || this.walkFrames[0];
-    if (!img) return;
-    imageMode(CENTER);
-    const iw = img.width || 100;
-    const ih = img.height || 100;
-    const maxH = height * 0.35;
-    const maxW = width * 0.5;
-    const scaleFactor = Math.min(maxW / iw, maxH / ih, 1.35);
-    const w = iw * scaleFactor * this.displayScale;
-    const h = ih * scaleFactor * this.displayScale;
-    push();
-    image(img, this.x, this.y, w, h);
-    pop();
-    // update spriteRect
-    this.spriteRect.x = this.x - w/2;
-    this.spriteRect.y = this.y - h/2;
-    this.spriteRect.w = w;
-    this.spriteRect.h = h;
   }
 }
