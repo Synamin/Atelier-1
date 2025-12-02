@@ -6,7 +6,8 @@ let electricBall = {
   x: 80, y: 80, w: 84, h: 84,
   held: false, offsetX: 0, offsetY: 0,
   armed: false,    // legacy: if you still use arm->global click flow
-  visible: true
+  visible: true,
+  prevTouching: false   // track previous-frame overlap so we can detect enter events
 };
 
 function loadBallAssets() {
@@ -39,7 +40,7 @@ function initBall() {
   electricBall.armed = false;
   electricBall.held = false;
   electricBall.visible = true;
-  electricBall.justTouched = false; // avoid repeated happiness increments while staying in contact
+  electricBall.prevTouching = false; // reset overlap edge state
 }
 
 function drawBall() {
@@ -82,6 +83,7 @@ function ballMousePressed(mx, my) {
     electricBall.offsetX = mx - electricBall.x;
     electricBall.offsetY = my - electricBall.y;
     electricBall.armed = false;
+    electricBall.prevTouching = false; // start fresh when picking up
     if (typeof player !== 'undefined' && player && typeof player.setLastInput === 'function') {
       player.setLastInput();
     }
@@ -116,19 +118,20 @@ function ballMouseDragged(mx, my) {
     player.followTarget.y = electricBall.y;
   }
 
-  // if player is close enough to the ball while chasing, increase happiness once per contact
-  if (typeof player !== 'undefined' && player && !electricBall.justTouched) {
+  // detect enter events (transition from not-touching -> touching)
+  let overlapping = false;
+  if (typeof player !== 'undefined' && player) {
     const px = (typeof player.x === 'number') ? player.x : (player.pos && player.pos.x);
     const py = (typeof player.y === 'number') ? player.y : (player.pos && player.pos.y);
     if (typeof px === 'number' && typeof py === 'number') {
       const dx = electricBall.x - px;
       const dy = electricBall.y - py;
       const dist = Math.hypot(dx, dy);
-      // threshold: half ball + half player sprite (fallback sizes)
       const prw = (player.spriteRect && player.spriteRect.w) ? player.spriteRect.w : (player.walkFrames && player.walkFrames[0] && player.walkFrames[0].width) || 64;
       const threshold = (Math.max(electricBall.w, electricBall.h) * 0.5) + (prw * 0.5) * 0.6;
-      if (dist <= threshold) {
-        electricBall.justTouched = true;
+      overlapping = dist <= threshold;
+      if (overlapping && !electricBall.prevTouching) {
+        // enter event -> increment happiness
         if (typeof happiness === 'number') {
           happiness = Math.min((typeof happinessMax === 'number' ? happinessMax : 100), happiness + 10);
         }
@@ -136,6 +139,8 @@ function ballMouseDragged(mx, my) {
       }
     }
   }
+  // update prevTouching: when overlap ends we allow the next enter to count
+  electricBall.prevTouching = overlapping;
 
   return true;
 }
@@ -147,8 +152,8 @@ function ballMouseReleased() {
   if (typeof player !== 'undefined' && player && player.followTarget) {
     player.followTarget.active = false;
   }
-  // allow future contacts to re-increment happiness again
-  electricBall.justTouched = false;
+  // reset prevTouching so future drags can award again
+  electricBall.prevTouching = false;
   console.log('ball: released -> player stops chasing');
   return true;
 }
