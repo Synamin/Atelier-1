@@ -171,9 +171,20 @@ function plateMouseDragged(mx, my) {
       electricPlate.y = electricPlate.resetY;
       electricPlate.held = false;
       electricPlate.justFed = true;
-      if (typeof startHappyPlayback === 'function') {
-        console.log('plate: calling startHappyPlayback()');
-        startHappyPlayback();
+
+      // NEW: force the character into a happy state for 3 seconds
+      if (typeof player !== 'undefined' && player) {
+        player.state = 'happy';
+        player.happyAnimTime = 0;
+        player.playHappyOnceFlag = true;
+        player.happyDuration = 3.0; // 3 seconds happy
+        // ensure Character has happy frames set already (sketch.setup does this)
+      } else {
+        // fallback: call existing starter if available
+        if (typeof startHappyPlayback === 'function') {
+          console.log('plate: calling startHappyPlayback() (fallback)');
+          startHappyPlayback();
+        }
       }
       return true;
     }
@@ -198,9 +209,18 @@ function plateMouseReleased() {
       electricPlate.y = electricPlate.resetY;
       electricPlate.held = false;
       electricPlate.justFed = true;
-      if (typeof startHappyPlayback === 'function') {
-        console.log('plate: calling startHappyPlayback()');
-        startHappyPlayback();
+
+      // NEW: force the character into a happy state for 3 seconds
+      if (typeof player !== 'undefined' && player) {
+        player.state = 'happy';
+        player.happyAnimTime = 0;
+        player.playHappyOnceFlag = true;
+        player.happyDuration = 3.0; // 3 seconds happy
+      } else {
+        if (typeof startHappyPlayback === 'function') {
+          console.log('plate: calling startHappyPlayback() (fallback)');
+          startHappyPlayback();
+        }
       }
       return true;
     }
