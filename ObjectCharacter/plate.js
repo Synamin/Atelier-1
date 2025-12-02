@@ -172,12 +172,12 @@ function plateMouseDragged(mx, my) {
       electricPlate.held = false;
       electricPlate.justFed = true;
 
-      // NEW: force the character into a happy state for 3 seconds
+      // NEW: force the character into a happy state for 5 seconds
       if (typeof player !== 'undefined' && player) {
         player.state = 'happy';
         player.happyAnimTime = 0;
         player.playHappyOnceFlag = true;
-        player.happyDuration = 3.0; // 3 seconds happy
+        player.happyDuration = 5.0; // 5 seconds happy
         // ensure Character has happy frames set already (sketch.setup does this)
       } else {
         // fallback: call existing starter if available
@@ -210,12 +210,12 @@ function plateMouseReleased() {
       electricPlate.held = false;
       electricPlate.justFed = true;
 
-      // NEW: force the character into a happy state for 3 seconds
+      // NEW: force the character into a happy state for 5 seconds
       if (typeof player !== 'undefined' && player) {
         player.state = 'happy';
         player.happyAnimTime = 0;
         player.playHappyOnceFlag = true;
-        player.happyDuration = 3.0; // 3 seconds happy
+        player.happyDuration = 5.0; // 5 seconds happy
       } else {
         if (typeof startHappyPlayback === 'function') {
           console.log('plate: calling startHappyPlayback() (fallback)');
@@ -225,31 +225,11 @@ function plateMouseReleased() {
       return true;
     }
 
+    // fallback: just reset the plate position
+    electricPlate.x = electricPlate.resetX;
+    electricPlate.y = electricPlate.resetY;
     electricPlate.held = false;
     return true;
   }
   return false;
-}
-
-// touch wrappers (use first touch)
-function plateTouchStarted(tx, ty) {
-  return plateMousePressed(tx, ty);
-}
-function plateTouchMoved(tx, ty) {
-  return plateMouseDragged(tx, ty);
-}
-function plateTouchEnded() {
-  return plateMouseReleased();
-}
-
-function windowResized() {
-  // ...existing resize logic...
-  // reposition plate to bottom-right on resize (unless being dragged)
-  const plateMargin = 24;
-  electricPlate.resetX = Math.round(width - plateMargin - electricPlate.w * 0.5);
-  electricPlate.resetY = Math.round(height - plateMargin - electricPlate.h * 0.5);
-  if (!electricPlate.held) {
-    electricPlate.x = electricPlate.resetX;
-    electricPlate.y = electricPlate.resetY;
-  }
 }
