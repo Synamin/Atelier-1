@@ -218,3 +218,17 @@ function plateMouseReleased() {
   }
   return false;
 }
+
+// Touch wrappers: forward first-touch coords to existing mouse handlers
+function plateTouchStarted(tx, ty) {
+  if (typeof plateMousePressed === 'function') return plateMousePressed(tx, ty);
+  return false;
+}
+function plateTouchMoved(tx, ty) {
+  if (typeof plateMouseDragged === 'function') return plateMouseDragged(tx, ty);
+  return false;
+}
+function plateTouchEnded() {
+  if (typeof plateMouseReleased === 'function') return plateMouseReleased();
+  return false;
+}

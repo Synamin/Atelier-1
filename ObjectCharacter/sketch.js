@@ -483,65 +483,62 @@ function mousePressed() {
   return false;
 }
 
+function touchStarted() {
+  // get first touch coords (fallback to mouseX/mouseY)
+  const tx = (typeof touches !== 'undefined' && touches && touches.length>0) ? touches[0].x : mouseX;
+  const ty = (typeof touches !== 'undefined' && touches && touches.length>0) ? touches[0].y : mouseY;
+
+  // ball gets priority
+  if (typeof ballTouchStarted === 'function' && ballTouchStarted(tx, ty)) return false;
+  if (typeof ballMousePressed === 'function' && ballMousePressed(tx, ty)) return false;
+
+  // plate
+  if (typeof plateTouchStarted === 'function' && plateTouchStarted(tx, ty)) return false;
+  if (typeof plateMousePressed === 'function' && plateMousePressed(tx, ty)) return false;
+
+  // existing behavior: tapping player
+  if (player && player.isPointInside && player.isPointInside(tx, ty)) {
+    if (typeof player.onClick === 'function') player.onClick();
+    if (typeof player.setLastInput === 'function') player.setLastInput();
+  }
+
+  // prevent default browser actions
+  return false;
+}
+
+function touchMoved() {
+  const tx = (typeof touches !== 'undefined' && touches && touches.length>0) ? touches[0].x : mouseX;
+  const ty = (typeof touches !== 'undefined' && touches && touches.length>0) ? touches[0].y : mouseY;
+
+  // forward to ball/plate drag handlers
+  if (typeof ballTouchMoved === 'function' && ballTouchMoved(tx, ty)) return false;
+  if (typeof ballMouseDragged === 'function' && ballMouseDragged(tx, ty)) return false;
+
+  if (typeof plateTouchMoved === 'function' && plateTouchMoved(tx, ty)) return false;
+  if (typeof plateMouseDragged === 'function' && plateMouseDragged(tx, ty)) return false;
+
+  return false;
+}
+
+function touchEnded() {
+  // forward releases
+  if (typeof ballTouchEnded === 'function' && ballTouchEnded()) return false;
+  if (typeof ballMouseReleased === 'function' && ballMouseReleased()) return false;
+
+  if (typeof plateTouchEnded === 'function' && plateTouchEnded()) return false;
+  if (typeof plateMouseReleased === 'function' && plateMouseReleased()) return false;
+
+  return false;
+}
+
+// Optionally keep mouse handlers (desktop)
 function mouseDragged() {
   if (typeof ballMouseDragged === 'function' && ballMouseDragged(mouseX, mouseY)) return false;
   if (typeof plateMouseDragged === 'function' && plateMouseDragged(mouseX, mouseY)) return false;
   return false;
 }
-
 function mouseReleased() {
   if (typeof ballMouseReleased === 'function' && ballMouseReleased()) return false;
   if (typeof plateMouseReleased === 'function' && plateMouseReleased()) return false;
   return false;
-}
-
-function touchStarted() {
-  const tx = touches?.[0]?.x ?? mouseX;
-  const ty = touches?.[0]?.y ?? mouseY;
-  if (typeof ballMousePressed === 'function' && ballMousePressed(tx, ty)) return false;
-  if (typeof ballHandleGlobalClick === 'function' && ballHandleGlobalClick(tx, ty)) return false;
-  if (typeof plateTouchStarted === 'function' && plateTouchStarted(tx, ty)) return false;
-
-  if (isAngry) return false;
-  if (player && player.isPointInside(tx, ty)) {
-    player.onClick();
-    increaseSpeedBoost();
-  }
-  if (player) player.setLastInput();
-  return false;
-}
-
-function touchMoved() {
-  const tx = touches?.[0]?.x ?? mouseX;
-  const ty = touches?.[0]?.y ?? mouseY;
-  if (typeof ballTouchMoved === 'function' && ballTouchMoved(tx, ty)) return false;
-  if (plateTouchMoved(tx, ty)) return false;
-  return true;
-}
-
-function touchEnded() {
-  if (typeof ballTouchEnded === 'function' && ballTouchEnded()) return false;
-  if (plateTouchEnded()) return false;
-  return false;
-}
-
-// helper: point in rect
-function _ptInRect(px, py, r) {
-  return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
-}
-
-// NEW: start happy playback (one-loop happy animation)
-function startHappyPlayback() {
-  if (!happyFrames || happyFrames.length === 0) {
-    console.warn('startHappyPlayback: no happyFrames available');
-    return;
-  }
-  happyPlayback.active = true;
-  happyPlayback.animTime = 0;
-  happyPlayback.duration = happyFrames.length / happyFps; // one full loop
-  console.log('startHappyPlayback: started, duration', happyPlayback.duration);
-  if (player) {
-    player.state = 'happy';
-    player.animTime = 0;
-  }
 }
