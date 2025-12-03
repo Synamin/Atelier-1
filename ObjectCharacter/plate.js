@@ -11,46 +11,33 @@ let electricPlate = {
 
 // call from sketch.preload()
 function loadPlateAssets() {
-  console.log('loadPlateAssets: start');
+  // try a set of likely paths (include exact location & case variants)
   const candidates = [
-    'assets/Food/electricPlate.png',   // try lowercase filename first
-    'assets/Food/ElectricPlate.png',
-    'assets/Food/electricplate.png',
-    'assets/Food/ElectricPlate.PNG',
-    'assets/Food/ElectricPlate.jpg',
-    'assets/Food/ElectricPlate.webp',
-    'assets/Food/electric_plate.png',
-    'assets/Food/Plate.png',
-    // fallback to top-level assets folder if moved
+    'assets/electricPlate.PNG',
     'assets/electricPlate.png',
+    'assets/ElectricPlate.PNG',
     'assets/ElectricPlate.png',
-    './assets/Food/electricPlate.png',
-    './assets/Food/ElectricPlate.png'
+    'assets/Food/electricPlate.png',
+    'assets/Food/ElectricPlate.png',
+    'assets/Food/electricPlate.PNG',
+    'assets/Food/ElectricPlate.PNG',
+    './assets/electricPlate.PNG',
+    './assets/electricPlate.png',
+    'ObjectCharacter/assets/electricPlate.PNG',
+    'ObjectCharacter/assets/electricPlate.png',
+    '../ObjectCharacter/assets/electricPlate.PNG'
   ];
-
-  let tried = [];
-  function tryLoad(idx) {
-    if (idx >= candidates.length) {
-      plateLoaded = false;
-      console.warn('loadPlateAssets: all candidates failed:', tried);
-      return;
-    }
-    const path = candidates[idx];
-    tried.push(path);
-    console.log('loadPlateAssets: trying', path);
-    plateImg = loadImage(path,
-      img => {
-        plateLoaded = true;
-        console.log('loadPlateAssets: plate image loaded from', path, img.width, img.height);
-      },
-      err => {
-        console.warn('loadPlateAssets: failed to load', path);
-        tryLoad(idx + 1);
-      }
+  let idx = 0;
+  function tryOne() {
+    if (idx >= candidates.length) { plateLoaded = false; console.warn('loadPlateAssets: no plate found'); return; }
+    const p = candidates[idx++];
+    console.log('loadPlateAssets: trying', p);
+    plateImg = loadImage(p,
+      img => { plateLoaded = true; console.log('loadPlateAssets: plate image loaded from', p, img.width, img.height); },
+      err => { console.warn('loadPlateAssets: failed to load', p); tryOne(); }
     );
   }
-
-  tryLoad(0);
+  tryOne();
 }
 
 // call from sketch.setup(), pass walkFrames for sizing reference
@@ -225,9 +212,7 @@ function plateMouseReleased() {
       return true;
     }
 
-    // fallback: just reset the plate position
-    electricPlate.x = electricPlate.resetX;
-    electricPlate.y = electricPlate.resetY;
+    // fallback: just release the plate
     electricPlate.held = false;
     return true;
   }

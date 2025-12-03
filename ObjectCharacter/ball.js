@@ -12,11 +12,17 @@ let electricBall = {
 
 function loadBallAssets() {
   const candidates = [
+    'assets/electricBall.PNG',
+    'assets/electricBall.png',
+    'assets/ElectricBall.PNG',
+    'assets/ElectricBall.png',
     'assets/Food/electricBall.png',
     'assets/Food/ball.png',
-    'assets/Food/electricball.png',
-    'assets/electricBall.png',
-    './assets/Food/electricBall.png'
+    './assets/electricBall.PNG',
+    './assets/electricBall.png',
+    'ObjectCharacter/assets/electricBall.PNG',
+    'ObjectCharacter/assets/electricBall.png',
+    '../ObjectCharacter/assets/electricBall.PNG'
   ];
   let idx = 0;
   function tryOne() {
